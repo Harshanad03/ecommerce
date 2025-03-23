@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EcomZ - Your Online Shopping Destination",
-  description: "Shop the latest products with great deals and fast shipping",
+  title: "E-Commerce Store",
+  description: "Your one-stop shop for everything",
 };
 
 export default function RootLayout({

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { getProductsByCategory } from '@/lib/api';
 import { formatPrice } from '@/lib/utils.js';
 import { categoriesData } from '@/data/productsData';
-import ProductImageFallback from '@/components/ui/ProductImageFallback.js';
+import ProductImageFallback from '@/components/ui/ProductImageFallback';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 
 export default function CategoryPage({ params }) {

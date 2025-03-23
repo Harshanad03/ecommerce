@@ -1,8 +1,22 @@
-"use client";
+'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { User } from '@supabase/supabase-js';
+
+interface UserProfile {
+  user_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone_number: string;
+  address: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+}
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState('signup');
@@ -13,11 +27,17 @@ export default function ProfilePage() {
     firstName: '',
     lastName: '',
     phoneNumber: '',
+    address: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: ''
   });
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -39,8 +59,11 @@ export default function ProfilePage() {
         if (profileError) throw profileError;
         setProfile(profile);
       }
-    } catch (err) {
-      console.error('Error fetching user:', err);
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      if (error instanceof Error) {
+        setError(error.message);
+      }
     }
   };
 
@@ -55,9 +78,10 @@ export default function ProfilePage() {
     }
   };
 
-  const handleSignUp = async (e) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     setLoading(true);
 
     try {
@@ -81,7 +105,12 @@ export default function ProfilePage() {
             email: formData.email,
             first_name: formData.firstName,
             last_name: formData.lastName,
-            phone_number: formData.phoneNumber
+            phone_number: formData.phoneNumber,
+            address: formData.address,
+            city: formData.city,
+            state: formData.state,
+            postal_code: formData.postalCode,
+            country: formData.country
           }
         ]);
 
@@ -98,19 +127,39 @@ export default function ProfilePage() {
 
       if (baseProfileError) throw baseProfileError;
 
-      alert('Account created successfully! Please sign in.');
-      setActiveTab('signin');
-      setFormData({ ...formData, password: '', confirmPassword: '' });
+      setSuccess('Account created successfully! Page will reload in 3 seconds...');
+      
+      // Reset form
+      setFormData({
+        email: '',
+        password: '',
+        confirmPassword: '',
+        firstName: '',
+        lastName: '',
+        phoneNumber: '',
+        address: '',
+        city: '',
+        state: '',
+        postalCode: '',
+        country: ''
+      });
 
-    } catch (err) {
-      console.error('Error:', err);
-      setError(err.message);
+      // Wait 3 seconds then reload
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error:', error);
+      if (error instanceof Error) {
+        setError(error.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSignIn = async (e) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -133,7 +182,7 @@ export default function ProfilePage() {
       if (profileError) throw profileError;
 
       setUser(user);
-      setProfile(profile);
+      setProfile(profile as UserProfile);
       setFormData({
         email: '',
         password: '',
@@ -141,11 +190,18 @@ export default function ProfilePage() {
         firstName: '',
         lastName: '',
         phoneNumber: '',
+        address: '',
+        city: '',
+        state: '',
+        postalCode: '',
+        country: ''
       });
 
-    } catch (err) {
-      console.error('Sign in error:', err);
-      setError(err.message);
+    } catch (error) {
+      console.error('Sign in error:', error);
+      if (error instanceof Error) {
+        setError(error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -155,6 +211,16 @@ export default function ProfilePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-8">
+          {user && (
+            <div className="bg-blue-50 p-4 rounded-md mb-4">
+              <p className="text-sm text-blue-800">
+                Your User ID: <code className="bg-blue-100 px-2 py-1 rounded">{user.id}</code>
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                Save this ID to make yourself an admin
+              </p>
+            </div>
+          )}
           <div>
             <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
               Your Profile
@@ -187,6 +253,36 @@ export default function ProfilePage() {
                     {profile.phone_number}
                   </dd>
                 </div>
+                <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                  <dt className="text-sm font-medium text-gray-500">Address</dt>
+                  <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                    {profile.address}
+                  </dd>
+                </div>
+                <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                  <dt className="text-sm font-medium text-gray-500">City</dt>
+                  <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                    {profile.city}
+                  </dd>
+                </div>
+                <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                  <dt className="text-sm font-medium text-gray-500">State</dt>
+                  <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                    {profile.state}
+                  </dd>
+                </div>
+                <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                  <dt className="text-sm font-medium text-gray-500">Postal Code</dt>
+                  <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                    {profile.postal_code}
+                  </dd>
+                </div>
+                <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                  <dt className="text-sm font-medium text-gray-500">Country</dt>
+                  <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                    {profile.country}
+                  </dd>
+                </div>
               </dl>
             </div>
           </div>
@@ -207,6 +303,16 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
+        {user && (
+          <div className="bg-blue-50 p-4 rounded-md mb-4">
+            <p className="text-sm text-blue-800">
+              Your User ID: <code className="bg-blue-100 px-2 py-1 rounded">{user.id}</code>
+            </p>
+            <p className="text-xs text-blue-600 mt-1">
+              Save this ID to make yourself an admin
+            </p>
+          </div>
+        )}
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             {activeTab === 'signup' ? 'Create your account' : 'Sign in to your account'}
@@ -242,6 +348,16 @@ export default function ProfilePage() {
             <div className="flex">
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-red-800">{error}</h3>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {success && (
+          <div className="rounded-md bg-green-50 p-4">
+            <div className="flex">
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-green-800">{success}</h3>
               </div>
             </div>
           </div>
@@ -304,6 +420,75 @@ export default function ProfilePage() {
                   value={formData.phoneNumber}
                   onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
                 />
+              </div>
+              <div>
+                <label htmlFor="address" className="sr-only">Address</label>
+                <input
+                  id="address"
+                  name="address"
+                  type="text"
+                  required
+                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                  placeholder="Address"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="city" className="sr-only">City</label>
+                  <input
+                    id="city"
+                    name="city"
+                    type="text"
+                    required
+                    className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                    placeholder="City"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="state" className="sr-only">State</label>
+                  <input
+                    id="state"
+                    name="state"
+                    type="text"
+                    required
+                    className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                    placeholder="State"
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="postalCode" className="sr-only">Postal Code</label>
+                  <input
+                    id="postalCode"
+                    name="postalCode"
+                    type="text"
+                    required
+                    className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                    placeholder="Postal Code"
+                    value={formData.postalCode}
+                    onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="country" className="sr-only">Country</label>
+                  <input
+                    id="country"
+                    name="country"
+                    type="text"
+                    required
+                    className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                    placeholder="Country"
+                    value={formData.country}
+                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  />
+                </div>
               </div>
               <div>
                 <label htmlFor="password" className="sr-only">Password</label>

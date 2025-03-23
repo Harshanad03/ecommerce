@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { getAllProducts } from '@/lib/api';
 import { formatPrice } from '@/lib/utils.js';
 import { categoriesData } from '@/data/productsData';
-import ProductImageFallback from '@/components/ui/ProductImageFallback.js';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 
 // Mock subcategories data - in a real app, this would come from your API or database

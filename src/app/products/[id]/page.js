@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { StarIcon, ShoppingCartIcon, HeartIcon } from '@heroicons/react/24/solid';
 import { getProductById, getProductsByCategory } from '@/lib/api';
 import { formatPrice } from '@/lib/utils.js';
-import ProductImageFallback from '@/components/ui/ProductImageFallback.js';
+import ProductImageFallback from '@/components/ui/ProductImageFallback';
 
 export default function ProductDetailPage({ params }) {
   const { id } = params;

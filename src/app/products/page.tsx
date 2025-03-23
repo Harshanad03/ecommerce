@@ -1,49 +1,23 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { formatPrice } from '@/lib/utils';
-import ProductImageFallback from '@/components/ui/ProductImageFallback';
-import AnimatedCard from '@/components/ui/AnimatedCard';
-import AddToCartButton from '@/components/ui/AddToCartButton';
-import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
 
 interface Product {
   id: string;
   name: string;
   description: string;
   price: number;
-  category_id: string;
-  subcategory_id: string;
   image_url: string;
-  stock: number;
+  category: string;
+  stock_quantity: number;
 }
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Animation variants for staggered animations
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0
-    }
-  };
 
   useEffect(() => {
     fetchProducts();
@@ -58,8 +32,9 @@ export default function ProductsPage() {
 
       if (error) throw error;
       setProducts(data || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      setError('Failed to load products');
     } finally {
       setLoading(false);
     }
@@ -76,61 +51,62 @@ export default function ProductsPage() {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-red-600">Error loading products: {error}</div>
+        <div className="text-red-600">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <h1 className="text-3xl font-extrabold text-gray-900 mb-8">All Products</h1>
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
-      >
-        {products.map((product) => (
-          <motion.div key={product.id} variants={itemVariants}>
-            <AnimatedCard>
-              <Link href={`/products/${product.id}`}>
-                <div className="relative h-64 w-full overflow-hidden rounded-lg">
-                  {product.image_url ? (
-                    <Image
-                      src={product.image_url}
-                      alt={product.name}
-                      fill
-                      className="object-cover object-center"
-                    />
-                  ) : (
-                    <ProductImageFallback category={product.category_id} />
-                  )}
+    <div className="min-h-screen bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold text-gray-900 mb-8">Our Products</h1>
+        
+        <div className="grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-3 xl:gap-x-8">
+          {products.map((product) => (
+            <div key={product.id} className="group relative bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="aspect-w-3 aspect-h-4 bg-gray-200 group-hover:opacity-75">
+                {product.image_url && (
+                  <img
+                    src={product.image_url}
+                    alt={product.name}
+                    className="w-full h-full object-center object-cover"
+                  />
+                )}
+              </div>
+              <div className="p-4">
+                <h3 className="text-lg font-medium text-gray-900">{product.name}</h3>
+                <p className="mt-1 text-sm text-gray-500 line-clamp-2">{product.description}</p>
+                <div className="mt-3 flex items-center justify-between">
+                  <p className="text-lg font-semibold text-gray-900">
+                    ${product.price.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {product.stock_quantity > 0 ? `${product.stock_quantity} in stock` : 'Out of stock'}
+                  </p>
                 </div>
                 <div className="mt-4">
-                  <h3 className="text-lg font-medium text-gray-900">{product.name}</h3>
-                  <p className="mt-1 text-sm text-gray-500">{product.description}</p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <p className="text-lg font-medium text-gray-900">
-                      {formatPrice(product.price)}
-                    </p>
-                    {product.stock > 0 ? (
-                      <span className="text-sm text-green-600">In Stock</span>
-                    ) : (
-                      <span className="text-sm text-red-600">Out of Stock</span>
-                    )}
-                  </div>
+                  <button
+                    disabled={product.stock_quantity === 0}
+                    className={`w-full py-2 px-4 rounded-md ${
+                      product.stock_quantity > 0
+                        ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                        : 'bg-gray-300 cursor-not-allowed text-gray-500'
+                    }`}
+                  >
+                    {product.stock_quantity > 0 ? 'Add to Cart' : 'Out of Stock'}
+                  </button>
                 </div>
-              </Link>
-              <div className="mt-4">
-                <AddToCartButton
-                  product={product}
-                  disabled={product.stock === 0}
-                />
               </div>
-            </AnimatedCard>
-          </motion.div>
-        ))}
-      </motion.div>
+            </div>
+          ))}
+        </div>
+
+        {products.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-500">No products available yet.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { ShoppingBagIcon, TruckIcon, CreditCardIcon, ArrowRightIcon, StarIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
 import { formatPrice } from "@/lib/utils.js";
-import ProductImageFallback from "@/components/ui/ProductImageFallback.js";
+import ProductImageFallback from "@/components/ui/ProductImageFallback.tsx";
 import { categoriesData } from "@/data/productsData";
 import { getAllProducts, getFeaturedProducts } from "@/lib/api";
 import { initializeProductsData } from "@/lib/initializeData";
