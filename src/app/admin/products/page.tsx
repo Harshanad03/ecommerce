@@ -22,13 +22,16 @@ export default function AdminProducts() {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
+    id: '',
     name: '',
     description: '',
     price: '',
     image_url: '',
     category: '',
-    stock_quantity: ''
+    stock_quantity: '',
+    imageFile: null as File | null
   });
   const [showForm, setShowForm] = useState(false);
   const router = useRouter();
@@ -82,6 +85,23 @@ export default function AdminProducts() {
     }
   };
 
+  const handleEdit = (product: Product) => {
+    setFormData({
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      price: product.price.toString(),
+      image_url: product.image_url,
+      category: product.category,
+      stock_quantity: product.stock_quantity.toString(),
+      imageFile: null
+    });
+    setIsEditing(true);
+    setShowForm(true);
+    setError(null);
+    setSuccess(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -89,47 +109,90 @@ export default function AdminProducts() {
     setSubmitLoading(true);
 
     try {
+      let finalImageUrl = formData.image_url;
+
+      // Handle local file upload if present
+      if (formData.imageFile) {
+        const fileExt = formData.imageFile.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `products/${fileName}`;
+
+        // Upload to Supabase Storage
+        const { error: uploadError, data } = await supabase.storage
+          .from('product-images')
+          .upload(filePath, formData.imageFile);
+
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('product-images')
+          .getPublicUrl(filePath);
+
+        finalImageUrl = publicUrl;
+      }
+
       const productData = {
         name: formData.name.trim(),
         description: formData.description.trim(),
         price: parseFloat(formData.price),
-        image_url: formData.image_url.trim(),
+        image_url: finalImageUrl.trim(),
         category: formData.category.trim(),
         stock_quantity: parseInt(formData.stock_quantity)
       };
 
-      // Validate data
-      if (productData.price <= 0) throw new Error('Price must be greater than 0');
-      if (productData.stock_quantity < 0) throw new Error('Stock quantity cannot be negative');
-      if (!productData.name) throw new Error('Product name is required');
-      if (!productData.category) throw new Error('Category is required');
+      let result;
+      if (isEditing) {
+        result = await supabase
+          .from('products')
+          .update(productData)
+          .eq('id', formData.id);
+      } else {
+        result = await supabase
+          .from('products')
+          .insert([productData]);
+      }
 
-      const { error } = await supabase
-        .from('products')
-        .insert([productData]);
+      if (result.error) throw result.error;
 
-      if (error) throw error;
-
-      setSuccess('Product added successfully!');
+      setSuccess(isEditing ? 'Product updated successfully!' : 'Product added successfully!');
       setShowForm(false);
-      
-      // Reset form
       setFormData({
+        id: '',
         name: '',
         description: '',
         price: '',
         image_url: '',
         category: '',
-        stock_quantity: ''
+        stock_quantity: '',
+        imageFile: null
       });
+      setIsEditing(false);
       
       fetchProducts();
     } catch (error) {
-      console.error('Error adding product:', error);
-      setError(error instanceof Error ? error.message : 'Failed to add product');
+      console.error('Error saving product:', error);
+      setError('Failed to save product');
     } finally {
       setSubmitLoading(false);
     }
+  };
+
+  const handleCancel = () => {
+    setShowForm(false);
+    setFormData({
+      id: '',
+      name: '',
+      description: '',
+      price: '',
+      image_url: '',
+      category: '',
+      stock_quantity: '',
+      imageFile: null
+    });
+    setIsEditing(false);
+    setError(null);
+    setSuccess(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -235,7 +298,9 @@ export default function AdminProducts() {
         {/* Add Product Form */}
         {showForm && (
           <div className="bg-white shadow-lg rounded-lg p-6 mb-8 animate-slideDown">
-            <h2 className="text-xl font-semibold mb-6">Add New Product</h2>
+            <h2 className="text-xl font-semibold mb-6">
+              {isEditing ? 'Edit Product' : 'Add New Product'}
+            </h2>
             <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Product Name *</label>
@@ -292,8 +357,8 @@ export default function AdminProducts() {
                 />
               </div>
 
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">Image URL</label>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Image URL (Optional)</label>
                 <input
                   type="url"
                   value={formData.image_url}
@@ -301,19 +366,39 @@ export default function AdminProducts() {
                   className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   placeholder="https://example.com/image.jpg"
                 />
-                {formData.image_url && (
-                  <div className="mt-2">
-                    <img
-                      src={formData.image_url}
-                      alt="Product preview"
-                      className="h-20 w-20 object-cover rounded-lg"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=No+Image';
-                      }}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Upload Image (Optional)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    setFormData({ ...formData, imageFile: file });
+                  }}
+                  className="mt-1 block w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-md file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-blue-50 file:text-blue-700
+                    hover:file:bg-blue-100"
+                />
+              </div>
+
+              {(formData.image_url || formData.imageFile) && (
+                <div className="mt-2">
+                  <label className="block text-sm font-medium text-gray-700">Image Preview</label>
+                  <div className="mt-1 relative h-48 w-48">
+                    <Image
+                      src={formData.imageFile ? URL.createObjectURL(formData.imageFile) : formData.image_url}
+                      alt="Preview"
+                      fill
+                      className="object-cover rounded-md"
                     />
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700">Description</label>
@@ -327,23 +412,22 @@ export default function AdminProducts() {
               </div>
 
               <div className="md:col-span-2">
-                <button
-                  type="submit"
-                  disabled={submitLoading}
-                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400 transition-colors"
-                >
-                  {submitLoading ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Adding Product...
-                    </>
-                  ) : (
-                    'Add Product'
-                  )}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={submitLoading}
+                    className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-blue-300"
+                  >
+                    {submitLoading ? (isEditing ? 'Updating...' : 'Adding...') : (isEditing ? 'Update Product' : 'Add Product')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -408,6 +492,15 @@ export default function AdminProducts() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => handleEdit(product)}
+                          className="text-yellow-600 hover:text-yellow-900 inline-flex items-center gap-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </button>
                         <button
                           onClick={() => handleDelete(product.id)}
                           className="text-red-600 hover:text-red-900 inline-flex items-center gap-1"
