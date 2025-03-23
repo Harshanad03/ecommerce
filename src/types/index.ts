@@ -3,12 +3,15 @@ export interface Product {
   name: string;
   description: string;
   price: number;
+  originalPrice?: number;
   category: string;
   image: string;
   rating: number;
   reviews: number;
   stock: number;
   featured?: boolean;
+  discount?: number;
+  isNew?: boolean;
 }
 
 export interface CartItem {

@@ -90,7 +90,7 @@ const Navbar = () => {
 
           {/* Cart & Account Icons */}
           <div className="flex items-center space-x-4">
-            <Link href="/account" className="text-gray-500 hover:text-gray-900">
+            <Link href="/profile" className="text-gray-500 hover:text-gray-900">
               <UserIcon className="h-6 w-6" aria-hidden="true" />
             </Link>
             <Link href="/cart" className="text-gray-500 hover:text-gray-900 relative">

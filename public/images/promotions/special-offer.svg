@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="600" height="400" viewBox="0 0 600 400" xmlns="http://www.w3.org/2000/svg">
+  <rect width="600" height="400" fill="#7E22CE"/>
+  <path d="M0 0 L600 0 L600 400 L0 400 Z" fill="#7E22CE"/>
+  <path d="M0 200 Q150 150, 300 200 T 600 200" fill="#9333EA" opacity="0.7"/>
+  <path d="M0 250 Q150 200, 300 250 T 600 250" fill="#A855F7" opacity="0.5"/>
+  <path d="M0 300 Q150 250, 300 300 T 600 300" fill="#C084FC" opacity="0.3"/>
+  <g fill="#FFFFFF" text-anchor="middle" font-family="Arial, sans-serif">
+    <text x="300" y="150" font-size="48" font-weight="bold">SPECIAL OFFER</text>
+    <text x="300" y="220" font-size="32">50% OFF</text>
+    <text x="300" y="270" font-size="24">Selected Items</text>
+  </g>
+  <g fill="#FFFFFF" opacity="0.2">
+    <polygon points="100,100 120,80 140,100 120,120" />
+    <polygon points="500,100 520,80 540,100 520,120" />
+    <polygon points="150,300 170,280 190,300 170,320" />
+    <polygon points="450,320 470,300 490,320 470,340" />
+    <polygon points="300,350 320,330 340,350 320,370" />
+  </g>
+</svg>

@@ -1,7 +1,9 @@
+"use client";
+
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { categories } from '@/data/products';
+import { categories } from '@/data/categories';
 import ProductImageFallback from '@/components/ui/ProductImageFallback';
 
 export default function CategoriesPage() {
@@ -31,10 +33,10 @@ export default function CategoriesPage() {
                   )}
                 </div>
               </div>
-              <div className="p-6 text-center">
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">{category.name}</h3>
-                <p className="text-gray-600 mb-4">{category.description}</p>
-                <div className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+              <div className="p-4 text-center">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">{category.name}</h3>
+                <p className="text-sm text-gray-600 mb-3">{category.description}</p>
+                <div className="inline-flex items-center justify-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
                   Shop Now
                 </div>
               </div>
