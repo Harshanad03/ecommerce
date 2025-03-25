@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -17,21 +17,36 @@ export default function AdminLogin() {
     setLoading(true);
 
     try {
+      // First, sign in the user
       const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (signInError) throw signInError;
+      if (signInError) {
+        console.error('Sign in error:', signInError);
+        throw new Error(signInError.message || 'Authentication failed');
+      }
+
+      if (!user) {
+        console.error('No user returned from sign in');
+        throw new Error('Authentication failed');
+      }
+
+      // Wait for auth state to update and profile trigger to complete
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Check if user is admin
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', user?.id)
+        .eq('id', user.id)
         .single();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('Profile query error:', profileError);
+        throw profileError;
+      }
 
       if (profile.role !== 'admin') {
         throw new Error('Access denied. Admin privileges required.');
@@ -46,6 +61,40 @@ export default function AdminLogin() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        
+        if (error) {
+          console.error('Auth check error:', error);
+          return;
+        }
+
+        if (user) {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+
+          if (profileError) {
+            console.error('Profile check error:', profileError);
+            return;
+          }
+
+          if (profile?.role === 'admin') {
+            router.push('/admin/products');
+          }
+        }
+      } catch (error) {
+        console.error('Admin check error:', error);
+      }
+    };
+
+    checkAuth();
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-12 px-4 sm:px-6 lg:px-8">

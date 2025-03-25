@@ -11,7 +11,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
+    detectSessionInUrl: false
   },
+  global: {
+    headers: {
+      'X-Client-Info': 'nextjs-supabase-auth'
+    }
+  }
 });
 
 // Debug any auth state changes
