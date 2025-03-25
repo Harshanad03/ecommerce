@@ -1,144 +1,197 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
+import { User, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
 
 interface UserProfile {
   id: string;
-  user_id: string;
-  email: string;
   first_name: string;
   last_name: string;
+  email: string;
   phone_number: string;
+  address: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
 }
 
 interface AuthContextType {
-  user: any;
-  userProfile: UserProfile | null;
-  signUp: (email: string, password: string) => Promise<any>;
-  signIn: (email: string, password: string) => Promise<any>;
+  user: User | null;
+  profile: UserProfile | null;
+  signUp: (email: string, password: string, userData: Omit<UserProfile, 'id'>) => Promise<{ error: AuthError | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
-  loading: boolean;
+  updateProfile: (profile: Partial<UserProfile>) => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
 
-  const fetchUserProfile = async (userId: string) => {
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        fetchProfile(session.user.id);
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session);
+      if (session?.user) {
+        setUser(session.user);
+        await fetchProfile(session.user.id);
+      } else {
+        setUser(null);
+        setProfile(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const fetchProfile = async (userId: string) => {
     try {
-      console.log('Fetching user profile for:', userId);
+      console.log('Fetching profile for user:', userId);
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .single();
 
       if (error) {
-        console.error('Error fetching user profile:', error);
-        return null;
+        console.error('Error fetching profile:', error);
+        throw error;
       }
 
-      console.log('Fetched user profile:', data);
-      return data;
+      console.log('Fetched profile:', data);
+      setProfile(data);
     } catch (error) {
-      console.error('Error:', error);
-      return null;
+      console.error('Error in fetchProfile:', error);
     }
   };
 
-  useEffect(() => {
-    // Check active sessions and sets the user
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      console.log('Initial session check:', session?.user);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const profile = await fetchUserProfile(session.user.id);
-        setUserProfile(profile);
-      } else {
-        setUserProfile(null);
-      }
-      setLoading(false);
-    });
-
-    // Listen for changes on auth state
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      console.log('Auth state changed:', { event: _event, user: session?.user });
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const profile = await fetchUserProfile(session.user.id);
-        setUserProfile(profile);
-      } else {
-        setUserProfile(null);
-      }
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, userData: Omit<UserProfile, 'id'>) => {
     try {
-      console.log('Signing up with:', { email });
-      const { data, error } = await supabase.auth.signUp({
+      console.log('Starting signup process for:', email);
+      
+      // Step 1: Create auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
+          data: {
+            first_name: userData.first_name,
+            last_name: userData.last_name
+          }
+        }
       });
-      
-      if (error) throw error;
-      
-      // Sign out immediately after signup to prevent auto-login
-      await supabase.auth.signOut();
-      return { data, error: null };
-    } catch (error: any) {
-      console.error('Signup error:', error);
-      return { data: null, error };
+
+      if (authError) {
+        console.error('Auth signup error:', authError);
+        return { error: authError };
+      }
+
+      if (!authData.user) {
+        console.error('No user data returned from auth signup');
+        return { error: new Error('No user data returned') };
+      }
+
+      console.log('Auth user created:', authData.user.id);
+
+      // Step 2: Create user profile
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .insert([
+          {
+            id: authData.user.id,
+            first_name: userData.first_name,
+            last_name: userData.last_name,
+            email: userData.email,
+            phone_number: userData.phone_number || '',
+            address: userData.address,
+            city: userData.city,
+            state: userData.state,
+            postal_code: userData.postal_code,
+            country: userData.country
+          }
+        ])
+        .select()
+        .single();
+
+      if (profileError) {
+        console.error('Profile creation error:', profileError);
+        // Cleanup: delete auth user if profile creation fails
+        await supabase.auth.admin.deleteUser(authData.user.id);
+        return { error: profileError };
+      }
+
+      console.log('User profile created successfully');
+      return { error: null };
+    } catch (error) {
+      console.error('Unexpected error in signUp:', error);
+      return { error: error as AuthError };
     }
   };
 
   const signIn = async (email: string, password: string) => {
     try {
-      console.log('Signing in with:', { email });
-      const { data, error } = await supabase.auth.signInWithPassword({
+      console.log('Attempting sign in for:', email);
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      
-      if (error) throw error;
 
-      console.log('Sign in successful:', data.user);
-
-      // Fetch user profile after successful sign in
-      if (data.user) {
-        const profile = await fetchUserProfile(data.user.id);
-        setUserProfile(profile);
+      if (error) {
+        console.error('Sign in error:', error);
       }
 
-      return { data, error: null };
-    } catch (error: any) {
-      console.error('Sign in error:', error);
-      return { data: null, error };
+      return { error };
+    } catch (error) {
+      console.error('Unexpected error in signIn:', error);
+      return { error: error as AuthError };
     }
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    setUserProfile(null);
-    router.push('/auth/signin');
+  };
+
+  const updateProfile = async (profileData: Partial<UserProfile>) => {
+    try {
+      if (!user) {
+        throw new Error('No user logged in');
+      }
+
+      console.log('Updating profile for user:', user.id);
+      const { error } = await supabase
+        .from('user_profiles')
+        .update(profileData)
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('Profile update error:', error);
+        throw error;
+      }
+
+      await fetchProfile(user.id);
+      return { error: null };
+    } catch (error) {
+      console.error('Error in updateProfile:', error);
+      return { error: error as Error };
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, signUp, signIn, signOut, loading }}>
+    <AuthContext.Provider value={{ user, profile, signUp, signIn, signOut, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );
