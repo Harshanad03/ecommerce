@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
+// Admin emails for direct authentication without querying profiles
+const ADMIN_EMAILS = ['admin@example.com']; // Add your admin emails here
+
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,22 +36,9 @@ export default function AdminLogin() {
         throw new Error('Authentication failed');
       }
 
-      // Wait for auth state to update and profile trigger to complete
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Check if user is admin
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) {
-        console.error('Profile query error:', profileError);
-        throw profileError;
-      }
-
-      if (profile.role !== 'admin') {
+      // Check if user email is in the admin list
+      if (!ADMIN_EMAILS.includes(user.email?.toLowerCase() || '')) {
+        console.error('User is not an admin');
         throw new Error('Access denied. Admin privileges required.');
       }
 
@@ -65,6 +55,7 @@ export default function AdminLogin() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        // Get current user
         const { data: { user }, error } = await supabase.auth.getUser();
         
         if (error) {
@@ -72,20 +63,12 @@ export default function AdminLogin() {
           return;
         }
 
-        if (user) {
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-          if (profileError) {
-            console.error('Profile check error:', profileError);
-            return;
-          }
-
-          if (profile?.role === 'admin') {
+        if (user && user.email) {
+          // Check if user email is in the admin list
+          if (ADMIN_EMAILS.includes(user.email.toLowerCase())) {
             router.push('/admin/products');
+          } else {
+            console.log('User is not an admin');
           }
         }
       } catch (error) {
@@ -94,7 +77,7 @@ export default function AdminLogin() {
     };
 
     checkAuth();
-  }, []);
+  }, [router]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-12 px-4 sm:px-6 lg:px-8">
