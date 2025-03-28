@@ -1,11 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-
-// Admin emails for direct authentication without querying profiles
-const ADMIN_EMAILS = ['admin@example.com']; // Add your admin emails here
+import { useAdmin } from '../auth';
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
@@ -13,6 +10,7 @@ export default function AdminLogin() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { login, isAdmin } = useAdmin();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,64 +18,27 @@ export default function AdminLogin() {
     setLoading(true);
 
     try {
-      // First, sign in the user
-      const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (signInError) {
-        console.error('Sign in error:', signInError);
-        throw new Error(signInError.message || 'Authentication failed');
+      const result = await login(email, password);
+      
+      if (result.success) {
+        // Redirect to admin dashboard
+        router.push('/admin/products');
+      } else {
+        throw new Error(result.message || 'Access denied. Admin privileges required.');
       }
-
-      if (!user) {
-        console.error('No user returned from sign in');
-        throw new Error('Authentication failed');
-      }
-
-      // Check if user email is in the admin list
-      if (!ADMIN_EMAILS.includes(user.email?.toLowerCase() || '')) {
-        console.error('User is not an admin');
-        throw new Error('Access denied. Admin privileges required.');
-      }
-
-      // Redirect to admin dashboard
-      router.push('/admin/products');
     } catch (error) {
       console.error('Login error:', error);
-      setError(error instanceof Error ? error.message : 'An error occurred');
+      setError(error instanceof Error ? error.message : 'Access denied. Admin privileges required.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        // Get current user
-        const { data: { user }, error } = await supabase.auth.getUser();
-        
-        if (error) {
-          console.error('Auth check error:', error);
-          return;
-        }
-
-        if (user && user.email) {
-          // Check if user email is in the admin list
-          if (ADMIN_EMAILS.includes(user.email.toLowerCase())) {
-            router.push('/admin/products');
-          } else {
-            console.log('User is not an admin');
-          }
-        }
-      } catch (error) {
-        console.error('Admin check error:', error);
-      }
-    };
-
-    checkAuth();
-  }, [router]);
+  // If already logged in, redirect to products page
+  if (isAdmin) {
+    router.push('/admin/products');
+    return null;
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-12 px-4 sm:px-6 lg:px-8">
