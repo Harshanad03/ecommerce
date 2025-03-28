@@ -53,28 +53,51 @@ if (typeof window !== 'undefined') {
   }
 }
 
+// Refresh local products from storage
+const refreshLocalProducts = () => {
+  if (typeof window !== 'undefined') {
+    localProducts = loadProductsFromStorage();
+  }
+};
+
 // Get all products
 export async function getAllProducts() {
   try {
     if (isSupabaseConfigured()) {
+      // Create Supabase client if not already created
+      if (!supabase) {
+        supabase = createSupabaseClient();
+      }
+      
+      // Fetch products directly from Supabase
       const { data, error } = await supabase
         .from('products')
-        .select('*');
+        .select('*')
+        .order('created_at', { ascending: false });
       
       if (error) {
         console.error('Error fetching products from Supabase:', error);
-        // Fall back to local storage
-        return typeof window !== 'undefined' ? loadProductsFromStorage() : localProducts;
+        // Fall back to localStorage
+        return localProducts;
       }
       
-      return data;
+      // Map the data to ensure compatibility with frontend
+      const mappedProducts = data.map(product => ({
+        ...product,
+        image: product.image_url, // For compatibility with frontend
+        stock: product.stock_quantity, // For compatibility with frontend
+        rating: product.rating || 4.5,
+        reviews: product.reviews || 0
+      }));
+      
+      return mappedProducts;
     } else {
       // Use localStorage if Supabase is not configured
-      return typeof window !== 'undefined' ? loadProductsFromStorage() : localProducts;
+      return localProducts;
     }
   } catch (error) {
     console.error('Error in getAllProducts:', error);
-    return typeof window !== 'undefined' ? loadProductsFromStorage() : localProducts;
+    return localProducts;
   }
 }
 
@@ -82,28 +105,41 @@ export async function getAllProducts() {
 export async function getFeaturedProducts() {
   try {
     if (isSupabaseConfigured()) {
+      // Create Supabase client if not already created
+      if (!supabase) {
+        supabase = createSupabaseClient();
+      }
+      
+      // Fetch featured products directly from Supabase
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .eq('featured', true);
+        .eq('featured', true)
+        .order('created_at', { ascending: false });
       
       if (error) {
         console.error('Error fetching featured products from Supabase:', error);
-        // Fall back to local storage
-        const products = typeof window !== 'undefined' ? loadProductsFromStorage() : localProducts;
-        return products.filter(product => product.featured);
+        // Fall back to localStorage
+        return localProducts.filter(product => product.featured);
       }
       
-      return data;
+      // Map the data to ensure compatibility with frontend
+      const mappedProducts = data.map(product => ({
+        ...product,
+        image: product.image_url, // For compatibility with frontend
+        stock: product.stock_quantity, // For compatibility with frontend
+        rating: product.rating || 4.5,
+        reviews: product.reviews || 0
+      }));
+      
+      return mappedProducts;
     } else {
       // Use localStorage if Supabase is not configured
-      const products = typeof window !== 'undefined' ? loadProductsFromStorage() : localProducts;
-      return products.filter(product => product.featured);
+      return localProducts.filter(product => product.featured);
     }
   } catch (error) {
     console.error('Error in getFeaturedProducts:', error);
-    const products = typeof window !== 'undefined' ? loadProductsFromStorage() : localProducts;
-    return products.filter(product => product.featured);
+    return localProducts.filter(product => product.featured);
   }
 }
 
@@ -111,6 +147,12 @@ export async function getFeaturedProducts() {
 export async function getProductById(id) {
   try {
     if (isSupabaseConfigured()) {
+      // Create Supabase client if not already created
+      if (!supabase) {
+        supabase = createSupabaseClient();
+      }
+      
+      // Fetch product by ID directly from Supabase
       const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -119,21 +161,27 @@ export async function getProductById(id) {
       
       if (error) {
         console.error(`Error fetching product with ID ${id} from Supabase:`, error);
-        // Fall back to local storage
-        const products = typeof window !== 'undefined' ? loadProductsFromStorage() : localProducts;
-        return products.find(product => product.id === id) || null;
+        // Fall back to localStorage
+        return localProducts.find(product => product.id === id) || null;
       }
       
-      return data;
+      // Map the data to ensure compatibility with frontend
+      const mappedProduct = {
+        ...data,
+        image: data.image_url, // For compatibility with frontend
+        stock: data.stock_quantity, // For compatibility with frontend
+        rating: data.rating || 4.5,
+        reviews: data.reviews || 0
+      };
+      
+      return mappedProduct;
     } else {
       // Use localStorage if Supabase is not configured
-      const products = typeof window !== 'undefined' ? loadProductsFromStorage() : localProducts;
-      return products.find(product => product.id === id) || null;
+      return localProducts.find(product => product.id === id) || null;
     }
   } catch (error) {
     console.error(`Error in getProductById for ID ${id}:`, error);
-    const products = typeof window !== 'undefined' ? loadProductsFromStorage() : localProducts;
-    return products.find(product => product.id === id) || null;
+    return localProducts.find(product => product.id === id) || null;
   }
 }
 
@@ -141,44 +189,65 @@ export async function getProductById(id) {
 export async function getProductsByCategory(category) {
   try {
     if (isSupabaseConfigured()) {
+      // Create Supabase client if not already created
+      if (!supabase) {
+        supabase = createSupabaseClient();
+      }
+      
+      // Fetch products by category directly from Supabase
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .eq('category', category);
+        .eq('category', category)
+        .order('created_at', { ascending: false });
       
       if (error) {
         console.error(`Error fetching products in category ${category} from Supabase:`, error);
-        // Fall back to local storage
-        const products = typeof window !== 'undefined' ? loadProductsFromStorage() : localProducts;
-        return products.filter(product => product.category === category);
+        // Fall back to localStorage
+        return localProducts.filter(product => product.category === category);
       }
       
-      return data;
+      // Map the data to ensure compatibility with frontend
+      const mappedProducts = data.map(product => ({
+        ...product,
+        image: product.image_url, // For compatibility with frontend
+        stock: product.stock_quantity, // For compatibility with frontend
+        rating: product.rating || 4.5,
+        reviews: product.reviews || 0
+      }));
+      
+      return mappedProducts;
     } else {
       // Use localStorage if Supabase is not configured
-      const products = typeof window !== 'undefined' ? loadProductsFromStorage() : localProducts;
-      return products.filter(product => product.category === category);
+      return localProducts.filter(product => product.category === category);
     }
   } catch (error) {
     console.error(`Error in getProductsByCategory for category ${category}:`, error);
-    const products = typeof window !== 'undefined' ? loadProductsFromStorage() : localProducts;
-    return products.filter(product => product.category === category);
+    return localProducts.filter(product => product.category === category);
   }
 }
 
 // Add a new product
 export async function addProduct(product) {
   try {
-    // Always save to localStorage as a backup
-    const newId = String(Date.now());
-    const newProduct = {
-      ...product,
-      id: newId,
-      rating: product.rating || 4.5,
-      reviews: product.reviews || 0
-    };
-    
     if (isSupabaseConfigured()) {
+      // Create Supabase client if not already created
+      if (!supabase) {
+        supabase = createSupabaseClient();
+      }
+      
+      // Create a complete product object with default values for missing fields
+      const newId = String(Date.now());
+      const newProduct = {
+        ...product,
+        id: newId,
+        created_at: new Date().toISOString(),
+        image: product.image_url, // For compatibility with frontend
+        rating: product.rating || 4.5,
+        reviews: product.reviews || 0,
+        stock: product.stock_quantity // For compatibility with frontend
+      };
+      
       // Try to save to Supabase
       const { data, error } = await supabase
         .from('products')
@@ -190,27 +259,35 @@ export async function addProduct(product) {
         console.log('Falling back to localStorage for product addition');
         
         // Save to localStorage as fallback
-        const products = typeof window !== 'undefined' ? loadProductsFromStorage() : [...localProducts];
-        products.push(newProduct);
-        saveProductsToStorage(products);
-        localProducts = products;
+        localProducts.push(newProduct);
+        saveProductsToStorage(localProducts);
         
         return newProduct;
       }
       
       // Also update localStorage to keep them in sync
-      const products = typeof window !== 'undefined' ? loadProductsFromStorage() : [...localProducts];
-      products.push(data[0]);
-      saveProductsToStorage(products);
-      localProducts = products;
+      if (data && data.length > 0) {
+        localProducts.push(data[0]);
+        saveProductsToStorage(localProducts);
+        return data[0];
+      }
       
-      return data[0];
+      return newProduct;
     } else {
       // Save to localStorage if Supabase is not configured
-      const products = typeof window !== 'undefined' ? loadProductsFromStorage() : [...localProducts];
-      products.push(newProduct);
-      saveProductsToStorage(products);
-      localProducts = products;
+      const newId = String(Date.now());
+      const newProduct = {
+        ...product,
+        id: newId,
+        created_at: new Date().toISOString(),
+        image: product.image_url, // For compatibility with frontend
+        rating: product.rating || 4.5,
+        reviews: product.reviews || 0,
+        stock: product.stock_quantity // For compatibility with frontend
+      };
+      
+      localProducts.push(newProduct);
+      saveProductsToStorage(localProducts);
       
       return newProduct;
     }
@@ -222,14 +299,15 @@ export async function addProduct(product) {
     const newProduct = {
       ...product,
       id: newId,
+      created_at: new Date().toISOString(),
+      image: product.image_url, // For compatibility with frontend
       rating: product.rating || 4.5,
-      reviews: product.reviews || 0
+      reviews: product.reviews || 0,
+      stock: product.stock_quantity // For compatibility with frontend
     };
     
-    const products = typeof window !== 'undefined' ? loadProductsFromStorage() : [...localProducts];
-    products.push(newProduct);
-    saveProductsToStorage(products);
-    localProducts = products;
+    localProducts.push(newProduct);
+    saveProductsToStorage(localProducts);
     
     return newProduct;
   }
@@ -238,74 +316,87 @@ export async function addProduct(product) {
 // Update a product
 export async function updateProduct(productToUpdate) {
   try {
-    const id = productToUpdate.id;
-    
     if (isSupabaseConfigured()) {
+      // Create Supabase client if not already created
+      if (!supabase) {
+        supabase = createSupabaseClient();
+      }
+      
+      // Ensure the product has all required fields for frontend compatibility
+      const updatedProduct = {
+        ...productToUpdate,
+        image: productToUpdate.image_url, // For compatibility with frontend
+        stock: productToUpdate.stock_quantity, // For compatibility with frontend
+        updated_at: new Date().toISOString()
+      };
+      
       // Try to update in Supabase
       const { data, error } = await supabase
         .from('products')
-        .update(productToUpdate)
-        .eq('id', id)
+        .update(updatedProduct)
+        .eq('id', updatedProduct.id)
         .select();
       
       if (error) {
-        console.error(`Error updating product with ID ${id} in Supabase:`, error);
+        console.error('Error updating product in Supabase:', error);
         console.log('Falling back to localStorage for product update');
         
         // Update in localStorage as fallback
-        const products = typeof window !== 'undefined' ? loadProductsFromStorage() : [...localProducts];
-        const index = products.findIndex(p => p.id === id);
-        
+        const index = localProducts.findIndex(p => p.id === updatedProduct.id);
         if (index !== -1) {
-          products[index] = { ...products[index], ...productToUpdate };
-          saveProductsToStorage(products);
-          localProducts = products;
-          return products[index];
+          localProducts[index] = updatedProduct;
+          saveProductsToStorage(localProducts);
         }
         
-        return null;
+        return updatedProduct;
       }
       
       // Also update localStorage to keep them in sync
-      const products = typeof window !== 'undefined' ? loadProductsFromStorage() : [...localProducts];
-      const index = products.findIndex(p => p.id === id);
-      
-      if (index !== -1) {
-        products[index] = data[0];
-        saveProductsToStorage(products);
-        localProducts = products;
+      if (data && data.length > 0) {
+        const index = localProducts.findIndex(p => p.id === updatedProduct.id);
+        if (index !== -1) {
+          localProducts[index] = data[0];
+          saveProductsToStorage(localProducts);
+        }
+        return data[0];
       }
       
-      return data[0];
+      return updatedProduct;
     } else {
       // Update in localStorage if Supabase is not configured
-      const products = typeof window !== 'undefined' ? loadProductsFromStorage() : [...localProducts];
-      const index = products.findIndex(p => p.id === id);
+      const updatedProduct = {
+        ...productToUpdate,
+        image: productToUpdate.image_url, // For compatibility with frontend
+        stock: productToUpdate.stock_quantity, // For compatibility with frontend
+        updated_at: new Date().toISOString()
+      };
       
+      const index = localProducts.findIndex(p => p.id === updatedProduct.id);
       if (index !== -1) {
-        products[index] = { ...products[index], ...productToUpdate };
-        saveProductsToStorage(products);
-        localProducts = products;
-        return products[index];
+        localProducts[index] = updatedProduct;
+        saveProductsToStorage(localProducts);
       }
       
-      return null;
+      return updatedProduct;
     }
   } catch (error) {
-    console.error(`Error in updateProduct for ID ${productToUpdate.id}:`, error);
+    console.error('Error in updateProduct:', error);
     
     // Always try to update localStorage as a last resort
-    const products = typeof window !== 'undefined' ? loadProductsFromStorage() : [...localProducts];
-    const index = products.findIndex(p => p.id === productToUpdate.id);
+    const updatedProduct = {
+      ...productToUpdate,
+      image: productToUpdate.image_url, // For compatibility with frontend
+      stock: productToUpdate.stock_quantity, // For compatibility with frontend
+      updated_at: new Date().toISOString()
+    };
     
+    const index = localProducts.findIndex(p => p.id === updatedProduct.id);
     if (index !== -1) {
-      products[index] = { ...products[index], ...productToUpdate };
-      saveProductsToStorage(products);
-      localProducts = products;
-      return products[index];
+      localProducts[index] = updatedProduct;
+      saveProductsToStorage(localProducts);
     }
     
-    return null;
+    return updatedProduct;
   }
 }
 
@@ -313,6 +404,11 @@ export async function updateProduct(productToUpdate) {
 export async function deleteProduct(id) {
   try {
     if (isSupabaseConfigured()) {
+      // Create Supabase client if not already created
+      if (!supabase) {
+        supabase = createSupabaseClient();
+      }
+      
       // Try to delete from Supabase
       const { error } = await supabase
         .from('products')
@@ -320,43 +416,39 @@ export async function deleteProduct(id) {
         .eq('id', id);
       
       if (error) {
-        console.error(`Error deleting product with ID ${id} from Supabase:`, error);
+        console.error('Error deleting product from Supabase:', error);
         console.log('Falling back to localStorage for product deletion');
         
         // Delete from localStorage as fallback
-        const products = typeof window !== 'undefined' ? loadProductsFromStorage() : [...localProducts];
-        const filteredProducts = products.filter(product => product.id !== id);
+        const filteredProducts = localProducts.filter(p => p.id !== id);
         saveProductsToStorage(filteredProducts);
         localProducts = filteredProducts;
         
-        return true;
+        return { success: true };
       }
       
       // Also update localStorage to keep them in sync
-      const products = typeof window !== 'undefined' ? loadProductsFromStorage() : [...localProducts];
-      const filteredProducts = products.filter(product => product.id !== id);
+      const filteredProducts = localProducts.filter(p => p.id !== id);
       saveProductsToStorage(filteredProducts);
       localProducts = filteredProducts;
       
-      return true;
+      return { success: true };
     } else {
       // Delete from localStorage if Supabase is not configured
-      const products = typeof window !== 'undefined' ? loadProductsFromStorage() : [...localProducts];
-      const filteredProducts = products.filter(product => product.id !== id);
+      const filteredProducts = localProducts.filter(p => p.id !== id);
       saveProductsToStorage(filteredProducts);
       localProducts = filteredProducts;
       
-      return true;
+      return { success: true };
     }
   } catch (error) {
-    console.error(`Error in deleteProduct for ID ${id}:`, error);
+    console.error('Error in deleteProduct:', error);
     
     // Always try to delete from localStorage as a last resort
-    const products = typeof window !== 'undefined' ? loadProductsFromStorage() : [...localProducts];
-    const filteredProducts = products.filter(product => product.id !== id);
+    const filteredProducts = localProducts.filter(p => p.id !== id);
     saveProductsToStorage(filteredProducts);
     localProducts = filteredProducts;
     
-    return true;
+    return { success: true };
   }
 }

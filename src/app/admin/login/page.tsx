@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAdmin } from '../auth';
 
@@ -9,8 +9,22 @@ export default function AdminLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   const router = useRouter();
-  const { login, isAdmin } = useAdmin();
+  const { login, isAdmin, loading: adminLoading } = useAdmin();
+
+  // Use useEffect for redirection when isAdmin changes
+  useEffect(() => {
+    if (!adminLoading && isAdmin) {
+      setRedirecting(true);
+      // Add a small delay before redirecting to prevent React state update issues
+      const redirectTimer = setTimeout(() => {
+        router.push('/admin/products');
+      }, 100);
+      
+      return () => clearTimeout(redirectTimer);
+    }
+  }, [isAdmin, adminLoading, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,23 +35,43 @@ export default function AdminLogin() {
       const result = await login(email, password);
       
       if (result.success) {
-        // Redirect to admin dashboard
-        router.push('/admin/products');
+        setRedirecting(true);
+        // Add a small delay before redirecting to prevent React state update issues
+        setTimeout(() => {
+          router.push('/admin/products');
+        }, 100);
       } else {
         throw new Error(result.message || 'Access denied. Admin privileges required.');
       }
     } catch (error) {
       console.error('Login error:', error);
       setError(error instanceof Error ? error.message : 'Access denied. Admin privileges required.');
-    } finally {
       setLoading(false);
     }
   };
 
-  // If already logged in, redirect to products page
-  if (isAdmin) {
-    router.push('/admin/products');
-    return null;
+  // Show loading state while checking admin status
+  if (adminLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If already logged in or currently redirecting, show redirect message
+  if (isAdmin || redirecting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Redirecting to admin dashboard...</p>
+        </div>
+      </div>
+    );
   }
 
   return (

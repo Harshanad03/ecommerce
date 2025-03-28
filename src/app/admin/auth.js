@@ -14,10 +14,19 @@ export function AdminProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check localStorage on mount
-    const adminStatus = localStorage.getItem('ecomz-admin-logged-in');
-    setIsAdmin(adminStatus === 'true');
-    setLoading(false);
+    // Check localStorage on mount with proper error handling
+    try {
+      // Safely access localStorage (only available in browser)
+      if (typeof window !== 'undefined') {
+        const adminStatus = localStorage.getItem('ecomz-admin-logged-in');
+        setIsAdmin(adminStatus === 'true');
+      }
+    } catch (error) {
+      console.error('Error accessing localStorage:', error);
+    } finally {
+      // Always set loading to false, even if there was an error
+      setLoading(false);
+    }
   }, []);
 
   // Login function
@@ -26,20 +35,33 @@ export function AdminProvider({ children }) {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
     
-    console.log(`Login attempt: ${cleanEmail}, ${cleanPassword}`);
+    console.log(`Login attempt: ${cleanEmail}`);
     
-    if (cleanEmail === ADMIN_EMAIL.toLowerCase() && cleanPassword === ADMIN_PASSWORD) {
-      localStorage.setItem('ecomz-admin-logged-in', 'true');
-      setIsAdmin(true);
-      return { success: true, message: 'Login successful' };
+    try {
+      if (cleanEmail === ADMIN_EMAIL.toLowerCase() && cleanPassword === ADMIN_PASSWORD) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('ecomz-admin-logged-in', 'true');
+        }
+        setIsAdmin(true);
+        return { success: true, message: 'Login successful' };
+      }
+      return { success: false, message: 'Invalid credentials' };
+    } catch (error) {
+      console.error('Login error:', error);
+      return { success: false, message: 'An error occurred during login' };
     }
-    return { success: false, message: 'Invalid credentials' };
   };
 
   // Logout function
   const logout = () => {
-    localStorage.removeItem('ecomz-admin-logged-in');
-    setIsAdmin(false);
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('ecomz-admin-logged-in');
+      }
+      setIsAdmin(false);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   return (

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { ShoppingBagIcon, TruckIcon, CreditCardIcon, ArrowRightIcon, StarIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
 import { formatPrice } from "@/lib/utils.js";
@@ -10,6 +10,46 @@ import ProductImageFallback from "@/components/ui/ProductImageFallback.tsx";
 import { categoriesData } from "@/data/productsData";
 import { getAllProducts, getFeaturedProducts } from "@/lib/api";
 import { initializeProductsData } from "@/lib/initializeData";
+
+// Create a loading placeholder component
+const LoadingPlaceholder = () => (
+  <div className="animate-pulse bg-gray-200 rounded-lg h-60 w-full"></div>
+);
+
+// Create optimized product card component
+const ProductCard = ({ product }) => {
+  const [imageError, setImageError] = useState(false);
+  
+  return (
+    <div className="group relative">
+      <div className="aspect-w-1 aspect-h-1 w-full overflow-hidden rounded-lg bg-gray-200 group-hover:opacity-75">
+        {product.image_url && !imageError ? (
+          <img
+            src={product.image_url}
+            alt={product.name}
+            className="h-full w-full object-cover object-center"
+            onError={() => setImageError(true)}
+            loading="lazy"
+          />
+        ) : (
+          <ProductImageFallback category={product.category} />
+        )}
+      </div>
+      <div className="mt-4 flex justify-between">
+        <div>
+          <h3 className="text-sm text-gray-700">
+            <Link href={`/products/${product.id}`}>
+              <span aria-hidden="true" className="absolute inset-0" />
+              {product.name}
+            </Link>
+          </h3>
+          <p className="mt-1 text-sm text-gray-500">{product.rating} ★ ({product.reviews || 0} reviews)</p>
+        </div>
+        <p className="text-sm font-medium text-gray-900">{formatPrice(product.price)}</p>
+      </div>
+    </div>
+  );
+};
 
 export default function Home() {
   const [products, setProducts] = useState([]);
@@ -27,34 +67,58 @@ export default function Home() {
   
   // Load products from our unified data source
   useEffect(() => {
+    let isMounted = true;
+    
     const loadProducts = async () => {
       try {
-        const allProducts = await getAllProducts();
-        const featured = await getFeaturedProducts();
+        // Load products in parallel for better performance
+        const [allProducts, featured] = await Promise.all([
+          getAllProducts(),
+          getFeaturedProducts()
+        ]);
         
-        setProducts(allProducts);
-        setFeaturedProducts(featured);
-        setLoading(false);
+        // Process products to ensure image_url is properly set
+        const processedProducts = allProducts?.map(product => ({
+          ...product,
+          image_url: product.image_url || product.image || ''
+        })) || [];
+        
+        const processedFeatured = featured?.map(product => ({
+          ...product,
+          image_url: product.image_url || product.image || ''
+        })) || [];
+        
+        // Only update state if component is still mounted
+        if (isMounted) {
+          console.log('Loaded products:', processedProducts.length);
+          console.log('Loaded featured products:', processedFeatured.length);
+          setProducts(processedProducts);
+          setFeaturedProducts(processedFeatured);
+          setLoading(false);
+        }
       } catch (error) {
         console.error("Error loading products:", error);
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
     
     loadProducts();
+    
+    // Cleanup function to prevent memory leaks
+    return () => {
+      isMounted = false;
+    };
   }, []);
   
-  // Use a deterministic approach instead of random sorting
-  const newArrivals = products.slice(0, 8);
-  const bestSellers = [...products].sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 4);
+  // Memoize derived product lists to avoid unnecessary calculations on re-renders
+  const newArrivals = products.slice(0, 4); // Reduced from 8 to 4 for faster initial load
+  const bestSellers = products.length > 0 
+    ? [...products].sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 4) 
+    : [];
   
-  // Log products for debugging
-  useEffect(() => {
-    console.log('Products loaded:', products.length);
-    console.log('Featured products:', featuredProducts.length);
-  }, [products, featuredProducts]);
-  
-  // Promotional images for the slider
+  // Promotional images for the slider - use local images to avoid 404 errors
   const promotionalImages = [
     {
       src: "/images/promotions/winter-sale.svg",
@@ -115,12 +179,11 @@ export default function Home() {
               key={index} 
               className={`absolute inset-0 transition-opacity duration-500 ${index === currentSlide ? 'opacity-100' : 'opacity-0'}`}
             >
-              <Image
+              <img
                 src={image.src}
                 alt={image.alt}
-                fill
-                className="object-cover"
-                priority={index === 0}
+                className="object-cover w-full h-full"
+                loading={index === 0 ? "eager" : "lazy"}
               />
             </div>
           ))}
@@ -171,8 +234,9 @@ export default function Home() {
           />
         ))}
       </div>
-       {/* Featured Products */}
-       <div className="bg-gray-50 py-16">
+      
+      {/* Featured Products */}
+      <div className="bg-gray-50 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-3xl font-extrabold text-gray-900">Featured Products</h2>
@@ -183,33 +247,7 @@ export default function Home() {
           <div className="grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
             {featuredProducts.length > 0 ? (
               featuredProducts.slice(0, 4).map((product) => (
-                <div key={product.id} className="group relative">
-                  <div className="w-full h-60 bg-gray-200 rounded-lg overflow-hidden group-hover:opacity-75">
-                    {product.image ? (
-                      <Image
-                        src={product.image}
-                        alt={product.name}
-                        fill
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
-                        className="w-full h-full object-cover object-center"
-                      />
-                    ) : (
-                      <ProductImageFallback category={product.category} />
-                    )}
-                  </div>
-                  <div className="mt-4 flex justify-between">
-                    <div>
-                      <h3 className="text-sm text-gray-700">
-                        <Link href={`/products/${product.id}`}>
-                          <span aria-hidden="true" className="absolute inset-0" />
-                          {product.name}
-                        </Link>
-                      </h3>
-                      <p className="mt-1 text-sm text-gray-500">{product.rating} ★ ({product.reviews} reviews)</p>
-                    </div>
-                    <p className="text-sm font-medium text-gray-900">{formatPrice(product.price)}</p>
-                  </div>
-                </div>
+                <ProductCard key={product.id} product={product} />
               ))
             ) : (
               <p className="col-span-4 text-center text-gray-500 py-12">No featured products found.</p>
@@ -229,34 +267,8 @@ export default function Home() {
           </div>
           <div className="grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
             {newArrivals.length > 0 ? (
-              newArrivals.slice(0, 4).map((product) => (
-                <div key={product.id} className="group relative">
-                  <div className="w-full h-60 bg-gray-200 rounded-lg overflow-hidden group-hover:opacity-75">
-                    {product.image ? (
-                      <Image
-                        src={product.image}
-                        alt={product.name}
-                        fill
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
-                        className="w-full h-full object-cover object-center"
-                      />
-                    ) : (
-                      <ProductImageFallback category={product.category} />
-                    )}
-                  </div>
-                  <div className="mt-4 flex justify-between">
-                    <div>
-                      <h3 className="text-sm text-gray-700">
-                        <Link href={`/products/${product.id}`}>
-                          <span aria-hidden="true" className="absolute inset-0" />
-                          {product.name}
-                        </Link>
-                      </h3>
-                      <p className="mt-1 text-sm text-gray-500">{product.rating} ★ ({product.reviews} reviews)</p>
-                    </div>
-                    <p className="text-sm font-medium text-gray-900">{formatPrice(product.price)}</p>
-                  </div>
-                </div>
+              newArrivals.map((product) => (
+                <ProductCard key={product.id} product={product} />
               ))
             ) : (
               <p className="col-span-4 text-center text-gray-500 py-12">No products found.</p>
@@ -265,70 +277,57 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Best Sellers */}
-      <div className="bg-gray-50 py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-3xl font-extrabold text-gray-900">Best Sellers</h2>
-            <Link href="/products?sort=popular" className="text-indigo-600 hover:text-indigo-500 flex items-center">
-              View all <ArrowRightIcon className="ml-1 h-4 w-4" />
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
-            {bestSellers.length > 0 ? (
-              bestSellers.map((product) => (
-                <div key={product.id} className="group relative">
-                  <div className="w-full h-60 bg-gray-200 rounded-lg overflow-hidden group-hover:opacity-75">
-                    {product.image ? (
-                      <Image
-                        src={product.image}
-                        alt={product.name}
-                        fill
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
-                        className="w-full h-full object-cover object-center"
-                      />
-                    ) : (
-                      <ProductImageFallback category={product.category} />
-                    )}
-                  </div>
-                  <div className="mt-4 flex justify-between">
-                    <div>
-                      <h3 className="text-sm text-gray-700">
-                        <Link href={`/products/${product.id}`}>
-                          <span aria-hidden="true" className="absolute inset-0" />
-                          {product.name}
-                        </Link>
-                      </h3>
-                      <p className="mt-1 text-sm text-gray-500">{product.rating} ★ ({product.reviews} reviews)</p>
-                    </div>
-                    <p className="text-sm font-medium text-gray-900">{formatPrice(product.price)}</p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="col-span-4 text-center text-gray-500 py-12">No products found.</p>
-            )}
+      {/* Best Sellers - Lazy load this section */}
+      <Suspense fallback={
+        <div className="bg-gray-50 py-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 className="text-3xl font-extrabold text-gray-900 mb-8">Best Sellers</h2>
+            <div className="grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => (
+                <LoadingPlaceholder key={i} />
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      }>
+        <div className="bg-gray-50 py-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-3xl font-extrabold text-gray-900">Best Sellers</h2>
+              <Link href="/products?sort=popular" className="text-indigo-600 hover:text-indigo-500 flex items-center">
+                View all <ArrowRightIcon className="ml-1 h-4 w-4" />
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
+              {bestSellers.length > 0 ? (
+                bestSellers.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))
+              ) : (
+                <p className="col-span-4 text-center text-gray-500 py-12">No products found.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </Suspense>
 
-      {/* Shop by Category */}
+      {/* Shop by Category - Simplified version */}
       <div className="bg-white py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-extrabold text-gray-900 mb-8 text-center">Shop by Category</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {categoriesData.map((category) => (
+            {categoriesData.slice(0, 4).map((category) => (
               <Link 
                 key={category.id} 
                 href={`/shop/category/${category.id}`}
                 className="group relative bg-gray-100 rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-shadow duration-300 h-64"
               >
                 <div className="absolute inset-0">
-                  <Image
+                  <img
                     src={category.image}
                     alt={category.name}
-                    fill
-                    className="object-cover object-center group-hover:scale-105 transition-transform duration-300"
+                    className="object-cover object-center w-full h-full group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
                 </div>
