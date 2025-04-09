@@ -8,7 +8,7 @@ import { ShoppingBagIcon, TruckIcon, CreditCardIcon, ArrowRightIcon, StarIcon, S
 import { formatPrice } from "@/lib/utils.js";
 import ProductImageFallback from "@/components/ui/ProductImageFallback.tsx";
 import { categoriesData } from "@/data/productsData";
-import { getAllProducts, getFeaturedProducts } from "@/lib/api";
+import { getAllProducts } from "@/lib/api";
 import { initializeProductsData } from "@/lib/initializeData";
 
 // Create a loading placeholder component
@@ -53,7 +53,6 @@ const ProductCard = ({ product }) => {
 
 export default function Home() {
   const [products, setProducts] = useState([]);
-  const [featuredProducts, setFeaturedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentSlide, setCurrentSlide] = useState(0);
   
@@ -71,11 +70,8 @@ export default function Home() {
     
     const loadProducts = async () => {
       try {
-        // Load products in parallel for better performance
-        const [allProducts, featured] = await Promise.all([
-          getAllProducts(),
-          getFeaturedProducts()
-        ]);
+        // Load only all products, not featured products
+        const allProducts = await getAllProducts();
         
         // Process products to ensure image_url is properly set
         const processedProducts = allProducts?.map(product => ({
@@ -83,17 +79,10 @@ export default function Home() {
           image_url: product.image_url || product.image || ''
         })) || [];
         
-        const processedFeatured = featured?.map(product => ({
-          ...product,
-          image_url: product.image_url || product.image || ''
-        })) || [];
-        
         // Only update state if component is still mounted
         if (isMounted) {
           console.log('Loaded products:', processedProducts.length);
-          console.log('Loaded featured products:', processedFeatured.length);
           setProducts(processedProducts);
-          setFeaturedProducts(processedFeatured);
           setLoading(false);
         }
       } catch (error) {
@@ -235,27 +224,6 @@ export default function Home() {
         ))}
       </div>
       
-      {/* Featured Products */}
-      <div className="bg-gray-50 py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-3xl font-extrabold text-gray-900">Featured Products</h2>
-            <Link href="/products?featured=true" className="text-indigo-600 hover:text-indigo-500 flex items-center">
-              View all <ArrowRightIcon className="ml-1 h-4 w-4" />
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 gap-y-10 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
-            {featuredProducts.length > 0 ? (
-              featuredProducts.slice(0, 4).map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))
-            ) : (
-              <p className="col-span-4 text-center text-gray-500 py-12">No featured products found.</p>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* New Arrivals */}
       <div className="bg-white py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
