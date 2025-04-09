@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 import { addProduct, updateProduct, deleteProduct, getAllProducts } from '@/lib/api';
+import { useAdmin } from '../auth';
 
 interface Product {
   id: string;
@@ -42,49 +43,20 @@ export default function AdminProducts() {
   });
   const [showForm, setShowForm] = useState(false);
   const router = useRouter();
+  const { isAdmin, loading: adminLoading } = useAdmin();
 
   useEffect(() => {
-    checkAdmin();
-    fetchProducts();
-  }, []);
-
-  const checkAdmin = async () => {
-    try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError) throw authError;
-
-      if (!user) {
-        router.push('/admin/login');
-        return;
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) {
-        // If profile doesn't exist or has an error, check admin credentials
-        const adminStatus = localStorage.getItem('ecomz-admin-logged-in');
-        if (adminStatus !== 'true') {
-          router.push('/admin/login');
-        }
-        return;
-      }
-
-      if (profile?.role !== 'admin') {
-        router.push('/admin/login');
-      }
-    } catch (error) {
-      console.error('Auth error:', error);
-      // Check local admin status as fallback
-      const adminStatus = localStorage.getItem('ecomz-admin-logged-in');
-      if (adminStatus !== 'true') {
-        router.push('/admin/login');
-      }
+    // Check admin status and redirect if not an admin
+    if (!adminLoading && !isAdmin) {
+      router.push('/admin/login');
+      return;
     }
-  };
+    
+    // Fetch products once we confirm admin status
+    if (!adminLoading && isAdmin) {
+      fetchProducts();
+    }
+  }, [isAdmin, adminLoading, router]);
 
   const fetchProducts = async () => {
     try {
@@ -351,15 +323,6 @@ export default function AdminProducts() {
                   Add Product
                 </>
               )}
-            </button>
-            <button
-              onClick={() => supabase.auth.signOut()}
-              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              Sign Out
             </button>
           </div>
         </div>

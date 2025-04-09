@@ -1,5 +1,8 @@
+-- Drop if exists
+DROP TABLE IF EXISTS public.products;
+
 -- Create products table
-create table if not exists products (
+CREATE TABLE public.products (
     id uuid default gen_random_uuid() primary key,
     name text not null,
     description text,
@@ -12,29 +15,38 @@ create table if not exists products (
 );
 
 -- Enable RLS
-alter table products enable row level security;
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 
--- Create policy for public read access
-create policy "Allow public read access on products"
-    on products for select
-    using ( true );
+-- Create policies for products
+CREATE POLICY "products_select_policy" 
+    ON products FOR SELECT 
+    USING (true);
 
--- Create policy for admin insert/update/delete
-create policy "Allow admin full access to products"
-    on products for all
-    using ( auth.role() = 'admin' );
+CREATE POLICY "products_insert_policy" 
+    ON products FOR INSERT 
+    WITH CHECK ((SELECT role FROM profiles WHERE id = auth.uid()) = 'admin');
 
--- Function to automatically set updated_at
-create or replace function set_updated_at()
-returns trigger as $$
-begin
+CREATE POLICY "products_update_policy" 
+    ON products FOR UPDATE 
+    USING ((SELECT role FROM profiles WHERE id = auth.uid()) = 'admin');
+
+CREATE POLICY "products_delete_policy" 
+    ON products FOR DELETE 
+    USING ((SELECT role FROM profiles WHERE id = auth.uid()) = 'admin');
+
+-- Create index
+CREATE INDEX IF NOT EXISTS products_category_idx ON products(category);
+
+-- Create updated_at trigger
+CREATE OR REPLACE FUNCTION public.handle_updated_at()
+RETURNS trigger AS $$
+BEGIN
     new.updated_at = now();
-    return new;
-end;
-$$ language plpgsql;
+    RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Trigger to update updated_at
-create trigger set_products_updated_at
-    before update on products
-    for each row
-    execute function set_updated_at();
+CREATE TRIGGER set_products_updated_at
+    BEFORE UPDATE ON public.products
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_updated_at();

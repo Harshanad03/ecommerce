@@ -4,149 +4,838 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAdmin } from './auth';
+import Image from 'next/image';
+import { supabase } from '@/lib/supabase';
 
-export default function AdminDashboardPage() {
+export default function AdminDashboard() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [activeTab, setActiveTab] = useState('products');
+  const [formData, setFormData] = useState({
+    id: '',
+    name: '',
+    description: '',
+    price: '',
+    image_url: '',
+    category: '',
+    stock_quantity: '',
+    imageFile: null
+  });
+  
   const router = useRouter();
-  const { isAdmin, loading } = useAdmin();
-  const [supabaseStatus, setSupabaseStatus] = useState('Not configured');
+  const { isAdmin, loading: adminLoading, user, logout } = useAdmin();
 
+  // Check admin status and fetch data
   useEffect(() => {
-    if (!loading && !isAdmin) {
+    if (!adminLoading && !isAdmin) {
       router.push('/admin/login');
+      return;
     }
+    
+    if (!adminLoading && isAdmin) {
+      // Add debugging to check user role
+      checkUserRole();
+      checkProductsBucket();
+      fetchProducts();
+    }
+  }, [isAdmin, adminLoading, router]);
 
-    // Check if Supabase is configured
-    if (typeof window !== 'undefined') {
-      const supabaseUrl = localStorage.getItem('supabase_url');
-      const supabaseKey = localStorage.getItem('supabase_key');
+  // Check if products bucket exists
+  const checkProductsBucket = async () => {
+    try {
+      console.log('Checking products bucket...');
       
-      if (supabaseUrl && supabaseKey) {
-        setSupabaseStatus('Configured');
+      // First check if the bucket exists
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+      
+      if (bucketsError) {
+        console.error('Error listing buckets:', bucketsError);
+        return;
       }
+      
+      console.log('Available buckets:', buckets);
+      
+      // Check if products bucket exists
+      const productsBucket = buckets.find(bucket => bucket.name === 'products');
+      
+      if (!productsBucket) {
+        console.log('Products bucket not found, creating...');
+        
+        // Create products bucket - try with simpler options
+        const { data, error } = await supabase.storage.createBucket('products', {
+          public: true
+        });
+        
+        if (error) {
+          console.error('Error creating products bucket:', error);
+          return;
+        }
+        
+        console.log('Products bucket created successfully');
+      } else {
+        console.log('Products bucket exists');
+      }
+      
+      // Update bucket policy - try to make it public regardless of whether it was just created
+      try {
+        const { data, error } = await supabase.storage.updateBucket('products', {
+          public: true
+        });
+        
+        if (error) {
+          console.error('Error updating bucket policy:', error);
+        } else {
+          console.log('Bucket policy updated successfully');
+        }
+      } catch (policyError) {
+        console.error('Error setting bucket policy:', policyError);
+      }
+    } catch (err) {
+      console.error('Error in checkProductsBucket:', err);
     }
-  }, [isAdmin, loading, router]);
+  };
 
-  if (loading) {
+  // Add function to check user role
+  const checkUserRole = async () => {
+    try {
+      if (!user) {
+        console.error('No user found');
+        return;
+      }
+      
+      console.log('Current user:', user);
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+        
+      if (error) {
+        console.error('Error checking user role:', error);
+        return;
+      }
+      
+      console.log('User role in profiles table:', data);
+    } catch (err) {
+      console.error('Error in checkUserRole:', err);
+    }
+  };
+
+  // Fetch products from database
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      setProducts(data || []);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      setError(`Failed to fetch products: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle product form edit
+  const handleEdit = (product) => {
+    setFormData({
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      price: product.price.toString(),
+      image_url: product.image_url,
+      category: product.category,
+      stock_quantity: product.stock_quantity.toString(),
+      imageFile: null
+    });
+    setIsEditing(true);
+    setShowForm(true);
+    setError(null);
+    setSuccess(null);
+  };
+
+  // Handle file input change
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setFormData({
+        ...formData,
+        imageFile: e.target.files[0]
+      });
+    }
+  };
+
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setSubmitLoading(true);
+
+    try {
+      let finalImageUrl = formData.image_url;
+
+      // Handle file upload if present
+      if (formData.imageFile) {
+        try {
+          console.log('Starting image upload...');
+          
+          const file = formData.imageFile;
+          const fileExt = file.name.split('.').pop();
+          const fileName = `product-${Date.now()}.${fileExt}`;
+          let filePath = fileName; // Using let instead of const since we might change it
+
+          console.log(`Uploading file: ${fileName} (${file.type}, ${file.size} bytes)`);
+          
+          // Upload to Supabase Storage with simplified options
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('products')
+            .upload(filePath, file);
+
+          if (uploadError) {
+            console.error('Image upload error:', uploadError);
+            throw uploadError;
+          }
+
+          console.log('File uploaded successfully:', uploadData);
+
+          // Get public URL
+          const { data: urlData } = supabase.storage
+            .from('products')
+            .getPublicUrl(filePath);
+
+          console.log('Image public URL data:', urlData);
+          
+          if (urlData && urlData.publicUrl) {
+            finalImageUrl = urlData.publicUrl;
+            console.log('Final image URL set to:', finalImageUrl);
+          } else {
+            console.error('Failed to get public URL for uploaded image');
+            throw new Error('Failed to get public URL for uploaded image');
+          }
+        } catch (imageError) {
+          console.error('Image upload error details:', imageError);
+          setError(`Failed to upload image: ${imageError.message || 'Unknown error'}`);
+          setSubmitLoading(false);
+          return;
+        }
+      }
+
+      // Prepare product data
+      const productData = {
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        price: parseFloat(formData.price) || 0,
+        image_url: finalImageUrl ? finalImageUrl.trim() : '',
+        category: formData.category.trim(),
+        stock_quantity: parseInt(formData.stock_quantity) || 0
+      };
+      
+      // Validate required fields
+      if (!productData.name) {
+        throw new Error('Product name is required');
+      }
+      
+      if (isNaN(productData.price) || productData.price <= 0) {
+        throw new Error('Product price must be a positive number');
+      }
+      
+      if (isNaN(productData.stock_quantity) || productData.stock_quantity < 0) {
+        throw new Error('Stock quantity must be a non-negative number');
+      }
+      
+      console.log('Product data to insert:', productData);
+      
+      if (isEditing) {
+        // Update existing product
+        const { error } = await supabase
+          .from('products')
+          .update({
+            ...productData,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', formData.id);
+          
+        if (error) throw error;
+        
+        setSuccess('Product updated successfully!');
+        
+        // Reset form and refresh products
+        setShowForm(false);
+        setFormData({
+          id: '',
+          name: '',
+          description: '',
+          price: '',
+          image_url: '',
+          category: '',
+          stock_quantity: '',
+          imageFile: null
+        });
+        setIsEditing(false);
+        fetchProducts();
+      } else {
+        // Add new product
+        console.log('Attempting to insert product with data:', JSON.stringify(productData, null, 2));
+        
+        try {
+          // First, let's log the DB table structure
+          const { data: tableInfo, error: tableError } = await supabase
+            .from('information_schema.columns')
+            .select('column_name, data_type')
+            .eq('table_name', 'products')
+            .eq('table_schema', 'public');
+            
+          if (tableError) {
+            console.error('Error fetching table structure:', tableError);
+          } else {
+            console.log('Products table columns:', tableInfo);
+          }
+          
+          // Now try to insert with only basic fields
+          const basicProductData = {
+            name: productData.name,
+            description: productData.description,
+            price: productData.price,
+            image_url: productData.image_url,
+            category: productData.category,
+            stock_quantity: productData.stock_quantity
+          };
+          
+          console.log('Inserting with simplified data:', basicProductData);
+          
+          const { data, error } = await supabase
+            .from('products')
+            .insert([basicProductData])
+            .select();
+          
+          if (error) {
+            console.error('Product insertion error:', error);
+            console.error('Error code:', error.code);
+            console.error('Error message:', error.message);
+            console.error('Error details:', error.details);
+            throw error;
+          }
+          
+          console.log('Successfully inserted product:', data);
+          setSuccess('Product added successfully!');
+          
+          // Reset form and refresh products
+          setShowForm(false);
+          setFormData({
+            id: '',
+            name: '',
+            description: '',
+            price: '',
+            image_url: '',
+            category: '',
+            stock_quantity: '',
+            imageFile: null
+          });
+          fetchProducts();
+        } catch (insertError) {
+          console.error('Error inserting product:', insertError);
+          setError(`Failed to save product: ${insertError.message || 'Unknown error'}`);
+          setSubmitLoading(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
+      setError(`Failed to save product: ${error.message || 'Unknown error'}`);
+      setSubmitLoading(false);
+    } finally {
+      // Make sure loading state is always reset
+      setSubmitLoading(false);
+    }
+  };
+
+  // Delete a product
+  const handleDelete = async (productId) => {
+    if (!confirm('Are you sure you want to delete this product?')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', productId);
+
+      if (error) throw error;
+      
+      setSuccess('Product deleted successfully!');
+      fetchProducts();
+    } catch (error) {
+      setError(`Failed to delete product: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (adminLoading) {
     return (
-      <div className="flex justify-center items-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="animate-spin h-12 w-12 border-t-2 border-b-2 border-indigo-600 rounded-full"></div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white">
-      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
-            Admin Dashboard
-          </h1>
-          <p className="mt-3 max-w-2xl mx-auto text-xl text-gray-500 sm:mt-4">
-            Manage your store from one central location
-          </p>
+    <div className="min-h-screen bg-gray-100">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Notifications */}
+        {error && (
+          <div className="mb-4 bg-red-50 border-l-4 border-red-400 p-4 rounded">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {success && (
+          <div className="mb-4 bg-green-50 border-l-4 border-green-400 p-4 rounded">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-green-700">{success}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Admin Dashboard Overview */}
+        <div className="bg-white shadow-md rounded-lg p-6 mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Admin Dashboard</h2>
+            
+            {/* Add user info and logout button */}
+            <div className="flex items-center">
+              <span className="text-sm text-gray-700 mr-4">
+                {user?.email || 'Admin'}
+              </span>
+              <button
+                onClick={logout}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                Logout
+              </button>
+            </div>
         </div>
 
-        <div className="mt-10">
-          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="pt-6">
-              <div className="flow-root bg-gray-50 rounded-lg px-6 pb-8">
-                <div className="-mt-6">
-                  <div>
-                    <span className="inline-flex items-center justify-center p-3 bg-indigo-500 rounded-md shadow-lg">
-                      <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="bg-indigo-50 p-4 rounded-lg">
+              <div className="flex items-center">
+                <div className="p-3 rounded-full bg-indigo-100 text-indigo-600">
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                       </svg>
-                    </span>
                   </div>
-                  <h3 className="mt-8 text-lg font-medium text-gray-900 tracking-tight">Products</h3>
-                  <p className="mt-5 text-base text-gray-500">
-                    Add, edit, and remove products from your store.
-                  </p>
-                  <div className="mt-6">
-                    <Link href="/admin/products" className="inline-flex px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
-                      Manage Products
-                    </Link>
-                  </div>
+                <div className="ml-4">
+                  <h3 className="text-lg font-medium text-gray-900">{products.length}</h3>
+                  <p className="text-sm text-gray-600">Total Products</p>
                 </div>
               </div>
             </div>
 
-            <div className="pt-6">
-              <div className="flow-root bg-gray-50 rounded-lg px-6 pb-8">
-                <div className="-mt-6">
-                  <div>
-                    <span className="inline-flex items-center justify-center p-3 bg-indigo-500 rounded-md shadow-lg">
-                      <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            <div className="bg-green-50 p-4 rounded-lg">
+              <div className="flex items-center">
+                <div className="p-3 rounded-full bg-green-100 text-green-600">
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                       </svg>
-                    </span>
                   </div>
-                  <h3 className="mt-8 text-lg font-medium text-gray-900 tracking-tight">Orders</h3>
-                  <p className="mt-5 text-base text-gray-500">
-                    View and manage customer orders.
-                  </p>
-                  <div className="mt-6">
-                    <Link href="/admin/orders" className="inline-flex px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
-                      Manage Orders
-                    </Link>
-                  </div>
+                <div className="ml-4">
+                  <h3 className="text-lg font-medium text-gray-900">0</h3>
+                  <p className="text-sm text-gray-600">Total Orders</p>
                 </div>
               </div>
             </div>
 
-            <div className="pt-6">
-              <div className="flow-root bg-gray-50 rounded-lg px-6 pb-8">
-                <div className="-mt-6">
-                  <div>
-                    <span className="inline-flex items-center justify-center p-3 bg-indigo-500 rounded-md shadow-lg">
-                      <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            <div className="bg-purple-50 p-4 rounded-lg">
+              <div className="flex items-center">
+                <div className="p-3 rounded-full bg-purple-100 text-purple-600">
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                       </svg>
-                    </span>
                   </div>
-                  <h3 className="mt-8 text-lg font-medium text-gray-900 tracking-tight">Settings</h3>
-                  <p className="mt-5 text-base text-gray-500">
-                    Configure your store settings.
-                  </p>
-                  <div className="mt-6">
-                    <Link href="/admin/settings" className="inline-flex px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
-                      Manage Settings
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-6">
-              <div className="flow-root bg-gray-50 rounded-lg px-6 pb-8">
-                <div className="-mt-6">
-                  <div>
-                    <span className="inline-flex items-center justify-center p-3 bg-indigo-500 rounded-md shadow-lg">
-                      <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-                      </svg>
-                    </span>
-                  </div>
-                  <h3 className="mt-8 text-lg font-medium text-gray-900 tracking-tight">Database Setup</h3>
-                  <p className="mt-5 text-base text-gray-500">
-                    Configure Supabase database connection.
-                    <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      supabaseStatus === 'Configured' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {supabaseStatus}
-                    </span>
-                  </p>
-                  <div className="mt-6">
-                    <Link href="/admin/setup" className="inline-flex px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
-                      Database Setup
-                    </Link>
-                  </div>
+                <div className="ml-4">
+                  <h3 className="text-lg font-medium text-gray-900">0</h3>
+                  <p className="text-sm text-gray-600">Total Users</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Tab Navigation */}
+        <nav className="mb-6">
+          <ul className="flex border-b">
+            <li className="mr-1">
+              <button
+                onClick={() => setActiveTab('products')}
+                className={`py-2 px-4 text-sm font-medium ${
+                  activeTab === 'products'
+                    ? 'text-indigo-600 border-b-2 border-indigo-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Products
+              </button>
+            </li>
+            <li className="mr-1">
+              <button
+                onClick={() => setActiveTab('orders')}
+                className={`py-2 px-4 text-sm font-medium ${
+                  activeTab === 'orders'
+                    ? 'text-indigo-600 border-b-2 border-indigo-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Orders
+              </button>
+            </li>
+            <li className="mr-1">
+              <button
+                onClick={() => setActiveTab('users')}
+                className={`py-2 px-4 text-sm font-medium ${
+                  activeTab === 'users'
+                    ? 'text-indigo-600 border-b-2 border-indigo-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Users
+              </button>
+            </li>
+          </ul>
+        </nav>
+
+        {/* Products Tab */}
+        {activeTab === 'products' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold text-gray-800">Product Management</h3>
+              <button
+                onClick={() => {
+                  setShowForm(true);
+                  setIsEditing(false);
+                  setFormData({
+                    id: '',
+                    name: '',
+                    description: '',
+                    price: '',
+                    image_url: '',
+                    category: '',
+                    stock_quantity: '',
+                    imageFile: null
+                  });
+                }}
+                className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+              >
+                Add New Product
+              </button>
+            </div>
+
+            {/* Product Form */}
+            {showForm && (
+              <div className="bg-white p-6 rounded shadow-md mb-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  {isEditing ? 'Edit Product' : 'Add New Product'}
+                </h3>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                        Product Name
+                      </label>
+                      <input
+                        type="text"
+                        id="name"
+                        required
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="category" className="block text-sm font-medium text-gray-700">
+                        Category
+                      </label>
+                      <select
+                        id="category"
+                        required
+                        value={formData.category}
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                      >
+                        <option value="">Select a category</option>
+                        <option value="electronics">Electronics</option>
+                        <option value="clothing">Clothing</option>
+                        <option value="books">Books</option>
+                        <option value="home">Home & Kitchen</option>
+                        <option value="toys">Toys & Games</option>
+                        <option value="beauty">Beauty & Personal Care</option>
+                        <option value="sports">Sports & Outdoors</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label htmlFor="price" className="block text-sm font-medium text-gray-700">
+                        Price ($)
+                      </label>
+                      <input
+                        type="number"
+                        id="price"
+                        required
+                        min="0.01"
+                        step="0.01"
+                        value={formData.price}
+                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="stock" className="block text-sm font-medium text-gray-700">
+                        Stock Quantity
+                      </label>
+                      <input
+                        type="number"
+                        id="stock"
+                        required
+                        min="0"
+                        step="1"
+                        value={formData.stock_quantity}
+                        onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                      Description
+                    </label>
+                    <textarea
+                      id="description"
+                      required
+                      rows={3}
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                    ></textarea>
+                  </div>
+
+                  <div>
+                    <label htmlFor="image_url" className="block text-sm font-medium text-gray-700">
+                      Image URL
+                    </label>
+                    <input
+                      type="text"
+                      id="image_url"
+                      value={formData.image_url}
+                      onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                      placeholder="https://example.com/image.jpg"
+                    />
+            </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Or Upload Image
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="mt-1 block w-full text-sm text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                    />
+                  </div>
+
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowForm(false)}
+                      className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitLoading}
+                      className={`bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 ${
+                        submitLoading ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      {submitLoading ? 'Saving...' : isEditing ? 'Update Product' : 'Add Product'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Products List */}
+            <div className="bg-white shadow-md rounded">
+              {loading ? (
+                <div className="p-8 text-center">
+                  <div className="animate-spin h-10 w-10 border-t-2 border-b-2 border-indigo-600 rounded-full mx-auto"></div>
+                  <p className="mt-4 text-gray-600">Loading products...</p>
+                </div>
+              ) : products.length === 0 ? (
+                <div className="p-8 text-center">
+                  <p className="text-gray-600">No products found. Add some products to get started!</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Product
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Category
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Price
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Stock
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {products.map((product) => (
+                        <tr key={product.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10 relative">
+                                {product.image_url && product.image_url.trim() ? (
+                                  <Image
+                                    src={product.image_url}
+                                    alt={product.name}
+                                    fill
+                                    sizes="40px"
+                                    style={{ objectFit: 'cover' }}
+                                    className="rounded-md"
+                                  />
+                                ) : (
+                                  <div className="h-10 w-10 rounded-md bg-gray-200 flex items-center justify-center">
+                                    <svg className="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">{product.name}</div>
+                                <div className="text-sm text-gray-500 truncate max-w-xs">{product.description}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{product.category}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">${product.price.toFixed(2)}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {product.stock_quantity}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              product.stock_quantity > 0 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {product.stock_quantity > 0 ? 'In Stock' : 'Out of Stock'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button
+                              onClick={() => handleEdit(product)}
+                              className="text-indigo-600 hover:text-indigo-900 mr-4"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(product.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Orders Tab - Placeholder */}
+        {activeTab === 'orders' && (
+          <div className="bg-white p-6 rounded shadow-md">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold text-gray-800">Order Management</h3>
+              </div>
+            <div className="text-center p-10">
+              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+              </svg>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No orders yet</h3>
+              <p className="mt-1 text-sm text-gray-500">Order management will be implemented in a future update.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Users Tab - Placeholder */}
+        {activeTab === 'users' && (
+          <div className="bg-white p-6 rounded shadow-md">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold text-gray-800">User Management</h3>
+            </div>
+            <div className="text-center p-10">
+              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No user management yet</h3>
+              <p className="mt-1 text-sm text-gray-500">User management will be implemented in a future update.</p>
+        </div>
       </div>
+        )}
+      </main>
     </div>
   );
 }

@@ -29,23 +29,27 @@ create policy "Users can update own profile"
 -- Allow admins to view all profiles
 create policy "Admins can view all profiles"
     on profiles for select
-    using (
-        auth.uid() in (
-            select id from profiles where role = 'admin'
-        )
-    );
+    using ( exists (
+        select 1 from profiles 
+        where id = auth.uid() and role = 'admin'
+    ) );
 
--- Allow admins to update any profile's role
-create policy "Admins can update any profile's role"
+-- Allow admins to update any profile
+create policy "Admins can update any profile"
     on profiles for update
-    using (
-        auth.uid() in (
-            select id from profiles where role = 'admin'
-        )
-    )
-    with check (
-        auth.uid() in (
-            select id from profiles where role = 'admin'
+    using ( exists (
+        select 1 from profiles 
+        where id = auth.uid() and role = 'admin'
+    ) );
+
+-- Allow initial admin creation
+create policy "Allow initial admin creation"
+    on profiles for insert
+    with check ( 
+        not exists (select 1 from profiles where role = 'admin')
+        or exists (
+            select 1 from profiles 
+            where id = auth.uid() and role = 'admin'
         )
     );
 
@@ -63,3 +67,12 @@ $$ language plpgsql security definer;
 create or replace trigger on_auth_user_created
     after insert on auth.users
     for each row execute procedure public.handle_new_user();
+
+
+-- UPDATE profiles 
+-- SET role = 'admin'
+-- WHERE email = 'giriprasath234@gmail.com';  -- Replace with the user's email
+
+-- UPDATE profiles 
+-- SET role = 'admin'
+-- WHERE id = '7d7e8e55-5ad0-4d30-8160-f370f5ceac17';  -- Replace with the user's ID
