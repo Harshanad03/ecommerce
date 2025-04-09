@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 
 export default function AdminDashboard() {
   const [products, setProducts] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -16,6 +17,20 @@ export default function AdminDashboard() {
   const [isEditing, setIsEditing] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [activeTab, setActiveTab] = useState('products');
+  const [showUserForm, setShowUserForm] = useState(false);
+  const [userFormData, setUserFormData] = useState({
+    id: '',
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone_number: '',
+    address: '',
+    city: '',
+    state: '',
+    postal_code: '',
+    country: '',
+    role: ''
+  });
   const [formData, setFormData] = useState({
     id: '',
     name: '',
@@ -42,6 +57,7 @@ export default function AdminDashboard() {
       checkUserRole();
       checkProductsBucket();
       fetchProducts();
+      fetchUsers();
     }
   }, [isAdmin, adminLoading, router]);
 
@@ -144,6 +160,65 @@ export default function AdminDashboard() {
       setError(`Failed to fetch products: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Add function to fetch users
+  const fetchUsers = async () => {
+    try {
+      // Fetch regular users from user_profiles table
+      const { data: userProfiles, error: userProfilesError } = await supabase
+        .from('user_profiles')
+        .select('*');
+
+      if (userProfilesError) {
+        console.error('Error fetching user profiles:', userProfilesError);
+        throw userProfilesError;
+      }
+
+      // Fetch admin users from profiles table
+      const { data: adminProfiles, error: adminProfilesError } = await supabase
+        .from('profiles')
+        .select('*');
+
+      if (adminProfilesError) {
+        console.error('Error fetching admin profiles:', adminProfilesError);
+        throw adminProfilesError;
+      }
+
+      // Combine both datasets with role information
+      const combinedUsers = userProfiles.map(profile => ({
+        ...profile,
+        role: 'user'
+      }));
+
+      // Add admin information from profiles table
+      adminProfiles.forEach(adminProfile => {
+        const existingUserIndex = combinedUsers.findIndex(user => user.id === adminProfile.id);
+        if (existingUserIndex >= 0) {
+          combinedUsers[existingUserIndex].role = adminProfile.role;
+        } else {
+          combinedUsers.push({
+            id: adminProfile.id,
+            email: adminProfile.email,
+            role: adminProfile.role,
+            first_name: 'Admin',
+            last_name: 'User',
+            // Fill in default values for user_profiles fields
+            phone_number: 'N/A',
+            address: 'N/A',
+            city: 'N/A',
+            state: 'N/A',
+            postal_code: 'N/A',
+            country: 'N/A'
+          });
+        }
+      });
+
+      setUsers(combinedUsers);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      setError(`Failed to fetch users: ${error.message || 'Unknown error'}`);
     }
   };
 
@@ -383,6 +458,92 @@ export default function AdminDashboard() {
     }
   };
 
+  // Add function to handle user edit
+  const handleUserEdit = (user) => {
+    setUserFormData({
+      id: user.id,
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      email: user.email || '',
+      phone_number: user.phone_number || '',
+      address: user.address || '',
+      city: user.city || '',
+      state: user.state || '',
+      postal_code: user.postal_code || '',
+      country: user.country || '',
+      role: user.role || 'user'
+    });
+    setShowUserForm(true);
+  };
+
+  // Add function to handle user form submission
+  const handleUserSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setSubmitLoading(true);
+
+    try {
+      // Update user profile data
+      const updateData = {
+        first_name: userFormData.first_name,
+        last_name: userFormData.last_name,
+        phone_number: userFormData.phone_number,
+        address: userFormData.address,
+        city: userFormData.city,
+        state: userFormData.state,
+        postal_code: userFormData.postal_code,
+        country: userFormData.country
+      };
+
+      // Update user profile in user_profiles table
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update(updateData)
+        .eq('id', userFormData.id);
+
+      if (profileError) {
+        console.error('Error updating user profile:', profileError);
+        throw profileError;
+      }
+
+      // Update user role in profiles table if admin
+      if (userFormData.role === 'admin') {
+        const { error: roleError } = await supabase
+          .from('profiles')
+          .update({ role: 'admin' })
+          .eq('id', userFormData.id);
+
+        if (roleError) {
+          console.error('Error updating user role:', roleError);
+          throw roleError;
+        }
+      } else {
+        // Update user role to 'user' in profiles table
+        const { error: roleError } = await supabase
+          .from('profiles')
+          .update({ role: 'user' })
+          .eq('id', userFormData.id);
+
+        if (roleError) {
+          console.error('Error updating user role:', roleError);
+          throw roleError;
+        }
+      }
+
+      setSuccess('User updated successfully!');
+      setShowUserForm(false);
+      
+      // Refresh users list
+      fetchUsers();
+    } catch (error) {
+      console.error('Error updating user:', error);
+      setError(`Failed to update user: ${error.message || 'Unknown error'}`);
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
   if (adminLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -481,7 +642,7 @@ export default function AdminDashboard() {
                       </svg>
                   </div>
                 <div className="ml-4">
-                  <h3 className="text-lg font-medium text-gray-900">0</h3>
+                  <h3 className="text-lg font-medium text-gray-900">{users.length}</h3>
                   <p className="text-sm text-gray-600">Total Users</p>
                 </div>
               </div>
@@ -820,20 +981,243 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Users Tab - Placeholder */}
+        {/* Users Tab */}
         {activeTab === 'users' && (
           <div className="bg-white p-6 rounded shadow-md">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-semibold text-gray-800">User Management</h3>
             </div>
-            <div className="text-center p-10">
-              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No user management yet</h3>
-              <p className="mt-1 text-sm text-gray-500">User management will be implemented in a future update.</p>
-        </div>
-      </div>
+            
+            {/* User Edit Form Modal */}
+            {showUserForm && (
+              <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div className="relative top-20 mx-auto p-5 border w-full max-w-xl shadow-lg rounded-md bg-white">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium text-gray-900">Edit User</h3>
+                    <button 
+                      onClick={() => setShowUserForm(false)}
+                      className="text-gray-400 hover:text-gray-500"
+                    >
+                      <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  
+                  <form onSubmit={handleUserSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="first_name" className="block text-sm font-medium text-gray-700">
+                          First Name
+                        </label>
+                        <input
+                          type="text"
+                          id="first_name"
+                          required
+                          value={userFormData.first_name}
+                          onChange={(e) => setUserFormData({ ...userFormData, first_name: e.target.value })}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label htmlFor="last_name" className="block text-sm font-medium text-gray-700">
+                          Last Name
+                        </label>
+                        <input
+                          type="text"
+                          id="last_name"
+                          required
+                          value={userFormData.last_name}
+                          onChange={(e) => setUserFormData({ ...userFormData, last_name: e.target.value })}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                          Email
+                        </label>
+                        <input
+                          type="email"
+                          id="email"
+                          required
+                          disabled
+                          value={userFormData.email}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-gray-100 text-gray-900"
+                        />
+                        <p className="mt-1 text-xs text-gray-500">Email cannot be changed</p>
+                      </div>
+                      
+                      <div>
+                        <label htmlFor="phone_number" className="block text-sm font-medium text-gray-700">
+                          Phone Number
+                        </label>
+                        <input
+                          type="tel"
+                          id="phone_number"
+                          value={userFormData.phone_number}
+                          onChange={(e) => setUserFormData({ ...userFormData, phone_number: e.target.value })}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                        />
+                      </div>
+                      
+                      <div className="md:col-span-2">
+                        <label htmlFor="address" className="block text-sm font-medium text-gray-700">
+                          Address
+                        </label>
+                        <input
+                          type="text"
+                          id="address"
+                          value={userFormData.address}
+                          onChange={(e) => setUserFormData({ ...userFormData, address: e.target.value })}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label htmlFor="city" className="block text-sm font-medium text-gray-700">
+                          City
+                        </label>
+                        <input
+                          type="text"
+                          id="city"
+                          value={userFormData.city}
+                          onChange={(e) => setUserFormData({ ...userFormData, city: e.target.value })}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label htmlFor="state" className="block text-sm font-medium text-gray-700">
+                          State/Province
+                        </label>
+                        <input
+                          type="text"
+                          id="state"
+                          value={userFormData.state}
+                          onChange={(e) => setUserFormData({ ...userFormData, state: e.target.value })}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label htmlFor="postal_code" className="block text-sm font-medium text-gray-700">
+                          Postal Code
+                        </label>
+                        <input
+                          type="text"
+                          id="postal_code"
+                          value={userFormData.postal_code}
+                          onChange={(e) => setUserFormData({ ...userFormData, postal_code: e.target.value })}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label htmlFor="country" className="block text-sm font-medium text-gray-700">
+                          Country
+                        </label>
+                        <input
+                          type="text"
+                          id="country"
+                          value={userFormData.country}
+                          onChange={(e) => setUserFormData({ ...userFormData, country: e.target.value })}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                        />
+                      </div>
+                      
+                      <div className="md:col-span-2">
+                        <label htmlFor="role" className="block text-sm font-medium text-gray-700">
+                          Role
+                        </label>
+                        <select
+                          id="role"
+                          value={userFormData.role}
+                          onChange={(e) => setUserFormData({ ...userFormData, role: e.target.value })}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-gray-900"
+                        >
+                          <option value="user">User</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-end space-x-3 mt-6">
+                      <button
+                        type="button"
+                        onClick={() => setShowUserForm(false)}
+                        className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={submitLoading}
+                        className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      >
+                        {submitLoading ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+            
+            {users.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Email
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Role
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {users.map((user) => (
+                      <tr key={user.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {user.email}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            user.role === 'admin'
+                              ? 'bg-indigo-100 text-indigo-800'
+                              : 'bg-green-100 text-green-800'
+                          }`}>
+                            {user.role === 'admin' ? 'Admin' : 'User'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button
+                            onClick={() => handleUserEdit(user)}
+                            className="text-indigo-600 hover:text-indigo-900"
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center p-10">
+                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
+                <p className="mt-1 text-sm text-gray-500">We couldn't find any users in the system.</p>
+              </div>
+            )}
+          </div>
         )}
       </main>
     </div>
