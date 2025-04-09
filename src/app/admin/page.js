@@ -1160,8 +1160,8 @@ export default function AdminDashboard() {
                       </button>
                     </div>
                   </form>
-                </div>
-              </div>
+        </div>
+      </div>
             )}
             
             {users.length > 0 ? (
