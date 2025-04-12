@@ -179,19 +179,19 @@ export default function Home() {
         </div>
         
         {/* Slider Navigation Arrows */}
-        <div className="absolute inset-y-0 left-0 flex items-center">
+        <div className="absolute inset-y-0 left-0 flex items-center z-10">
           <button 
             onClick={goToPrevSlide}
-            className="bg-white/80 p-2 rounded-r-md hover:bg-white focus:outline-none"
+            className="bg-white/80 p-2 rounded-r-md hover:bg-white focus:outline-none shadow-md transition-all duration-200 hover:scale-110"
             aria-label="Previous slide"
           >
             <ChevronLeftIcon className="h-6 w-6 text-gray-800" />
           </button>
         </div>
-        <div className="absolute inset-y-0 right-0 flex items-center">
+        <div className="absolute inset-y-0 right-0 flex items-center z-10">
           <button 
             onClick={goToNextSlide}
-            className="bg-white/80 p-2 rounded-l-md hover:bg-white focus:outline-none"
+            className="bg-white/80 p-2 rounded-l-md hover:bg-white focus:outline-none shadow-md transition-all duration-200 hover:scale-110"
             aria-label="Next slide"
           >
             <ChevronRightIcon className="h-6 w-6 text-gray-800" />
@@ -279,24 +279,34 @@ export default function Home() {
         </div>
       </Suspense>
 
-      {/* Shop by Category - Simplified version */}
+      {/* Shop by Category */}
       <div className="bg-white py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-extrabold text-gray-900 mb-8 text-center">Shop by Category</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {categoriesData.slice(0, 4).map((category) => (
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-3xl font-extrabold text-gray-900">Shop by Category</h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {categoriesData.slice(0, 3).map((category) => (
               <Link 
                 key={category.id} 
-                href={`/shop/category/${category.id}`}
+                href={`/categories/${category.id}`}
                 className="group relative bg-gray-100 rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-shadow duration-300 h-64"
               >
                 <div className="absolute inset-0">
-                  <img
-                    src={category.image}
-                    alt={category.name}
-                    className="object-cover object-center w-full h-full group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
-                  />
+                  {category.image ? (
+                    <img
+                      src={category.image}
+                      alt={category.name}
+                      className="object-cover object-center w-full h-full group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = `/images/categories/placeholder.jpg`;
+                      }}
+                    />
+                  ) : (
+                    <ProductImageFallback category={category.id} className="h-full w-full" />
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
                 </div>
                 <div className="absolute bottom-0 left-0 right-0 p-4">
@@ -305,6 +315,14 @@ export default function Home() {
                 </div>
               </Link>
             ))}
+          </div>
+          <div className="mt-8 text-center">
+            <Link 
+              href="/categories" 
+              className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+            >
+              Show More Categories
+            </Link>
           </div>
         </div>
       </div>

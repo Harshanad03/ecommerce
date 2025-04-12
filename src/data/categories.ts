@@ -43,12 +43,6 @@ export const categories: Category[] = [
         name: 'Wearable Technology',
         description: 'Smartwatches, fitness trackers, and more',
         image: '/images/categories/wearables.jpg'
-      },
-      {
-        id: 'cameras',
-        name: 'Cameras & Photography',
-        description: 'Digital cameras, lenses, and accessories',
-        image: '/images/categories/cameras.jpg'
       }
     ]
   },
@@ -75,12 +69,6 @@ export const categories: Category[] = [
         name: "Kids' Clothing",
         description: 'Comfortable and stylish clothing for children',
         image: '/images/categories/kids.jpg'
-      },
-      {
-        id: 'shoes',
-        name: 'Footwear',
-        description: 'Shoes, boots, sandals, and more',
-        image: '/images/categories/shoes.jpg'
       },
       {
         id: 'accessories',
@@ -119,12 +107,6 @@ export const categories: Category[] = [
         name: 'Home Decor',
         description: 'Decorative items to beautify your home',
         image: '/images/categories/decor.jpg'
-      },
-      {
-        id: 'appliances',
-        name: 'Appliances',
-        description: 'Major and small appliances for your home',
-        image: '/images/categories/appliances.jpg'
       }
     ]
   },
@@ -157,12 +139,6 @@ export const categories: Category[] = [
         name: 'Textbooks & Education',
         description: 'Academic and educational resources',
         image: '/images/categories/textbooks.jpg'
-      },
-      {
-        id: 'ebooks',
-        name: 'E-Books & Audiobooks',
-        description: 'Digital books and audio content',
-        image: '/images/categories/ebooks.jpg'
       }
     ]
   },
@@ -195,12 +171,6 @@ export const categories: Category[] = [
         name: 'Fragrance',
         description: 'Perfumes, colognes, and body sprays',
         image: '/images/categories/fragrance.jpg'
-      },
-      {
-        id: 'personalcare',
-        name: 'Personal Care',
-        description: 'Bath, body, and personal hygiene products',
-        image: '/images/categories/personalcare.jpg'
       }
     ]
   },
@@ -233,88 +203,6 @@ export const categories: Category[] = [
         name: 'Fitness & Exercise',
         description: 'Home gym equipment and accessories',
         image: '/images/categories/fitness.jpg'
-      },
-      {
-        id: 'fanshop',
-        name: 'Fan Shop',
-        description: 'Merchandise for sports teams and athletes',
-        image: '/images/categories/fanshop.jpg'
-      }
-    ]
-  },
-  {
-    id: 'toys',
-    name: 'Toys & Games',
-    description: 'Fun for all ages',
-    image: '/images/categories/toys.jpg',
-    subcategories: [
-      {
-        id: 'toddler',
-        name: 'Toddler Toys',
-        description: 'Educational and fun toys for toddlers',
-        image: '/images/categories/toddler.jpg'
-      },
-      {
-        id: 'action',
-        name: 'Action Figures & Collectibles',
-        description: 'Collectible figures and memorabilia',
-        image: '/images/categories/action.jpg'
-      },
-      {
-        id: 'boardgames',
-        name: 'Board Games & Puzzles',
-        description: 'Family games, puzzles, and card games',
-        image: '/images/categories/boardgames.jpg'
-      },
-      {
-        id: 'videogames',
-        name: 'Video Games',
-        description: 'Games for all platforms and consoles',
-        image: '/images/categories/videogames.jpg'
-      },
-      {
-        id: 'outdoor',
-        name: 'Outdoor Play',
-        description: 'Toys for outdoor fun and activities',
-        image: '/images/categories/outdoorplay.jpg'
-      }
-    ]
-  },
-  {
-    id: 'automotive',
-    name: 'Automotive',
-    description: 'Car parts and accessories',
-    image: '/images/categories/automotive.jpg',
-    subcategories: [
-      {
-        id: 'parts',
-        name: 'Car Parts & Accessories',
-        description: 'Replacement parts and accessories for vehicles',
-        image: '/images/categories/parts.jpg'
-      },
-      {
-        id: 'tools',
-        name: 'Tools & Equipment',
-        description: 'Automotive tools and garage equipment',
-        image: '/images/categories/tools.jpg'
-      },
-      {
-        id: 'electronics',
-        name: 'Car Electronics',
-        description: 'Audio systems, GPS, and other electronics',
-        image: '/images/categories/carelectronics.jpg'
-      },
-      {
-        id: 'tires',
-        name: 'Tires & Wheels',
-        description: 'Tires, wheels, and related accessories',
-        image: '/images/categories/tires.jpg'
-      },
-      {
-        id: 'interior',
-        name: 'Interior Accessories',
-        description: 'Seat covers, floor mats, and interior decor',
-        image: '/images/categories/interior.jpg'
       }
     ]
   }
