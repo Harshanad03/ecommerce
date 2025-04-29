@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -10,17 +11,12 @@ export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
 
   const [signupData, setSignupData] = useState({
-    first_name: '',
-    last_name: '',
     email: '',
-    phone_number: '',
-    address: '',
-    city: '',
-    state: '',
-    postal_code: '',
-    country: '',
     password: '',
     confirmPassword: ''
   });
@@ -63,7 +59,7 @@ export default function AuthPage() {
         throw new Error('Passwords do not match');
       }
 
-      // 1. Create auth user
+      // Create auth user
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: signupData.email,
         password: signupData.password,
@@ -76,56 +72,6 @@ export default function AuthPage() {
 
       if (signUpError) throw signUpError;
       if (!authData.user) throw new Error('Signup failed');
-
-      // 2. Check if user profile already exists
-      const { data: existingProfile, error: checkError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', authData.user.id)
-        .single();
-
-      if (checkError) throw checkError;
-
-      if (existingProfile) {
-        // If profile exists, update it with new data
-        const { error: updateError } = await supabase
-          .from('user_profiles')
-          .update({
-            first_name: signupData.first_name,
-            last_name: signupData.last_name,
-            email: signupData.email,
-            phone_number: signupData.phone_number,
-            address: signupData.address,
-            city: signupData.city,
-            state: signupData.state,
-            postal_code: signupData.postal_code,
-            country: signupData.country,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', authData.user.id);
-
-        if (updateError) throw updateError;
-      } else {
-        // If profile doesn't exist, create a new one
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .insert({
-            id: authData.user.id,
-            first_name: signupData.first_name,
-            last_name: signupData.last_name,
-            email: signupData.email,
-            phone_number: signupData.phone_number,
-            address: signupData.address,
-            city: signupData.city,
-            state: signupData.state,
-            postal_code: signupData.postal_code,
-            country: signupData.country,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-
-        if (profileError) throw profileError;
-      }
 
       setSuccess('Account created! Please check your email to verify your account.');
       setActiveTab('signin');
@@ -148,6 +94,49 @@ export default function AuthPage() {
       ...prev,
       [e.target.name]: e.target.value
     }));
+  };
+
+  const handleForgotPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsResetting(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/reset-password?code=true`,
+        type: 'recovery'
+      });
+
+      if (error) throw error;
+
+      setSuccess('A verification code has been sent to your email');
+      setIsForgotPassword(false);
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const handlePasswordReset = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: signupData.password
+      });
+
+      if (error) throw error;
+
+      setSuccess('Password has been updated successfully.');
+      setSignupData({ ...signupData, password: '', confirmPassword: '' });
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -275,10 +264,184 @@ export default function AuthPage() {
 
             {/* Sign In Form */}
             {activeTab === 'signin' ? (
-              <form onSubmit={handleSignIn} className="mt-8 space-y-6">
+              isForgotPassword ? (
+                <form onSubmit={handleForgotPassword} className="mt-8 space-y-6">
+                  <div className="space-y-4">
+                    <div className="group">
+                      <label className="block text-sm font-medium text-gray-700">Email</label>
+                      <div className="mt-1 relative rounded-md shadow-sm">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                          </svg>
+                        </div>
+                        <input
+                          type="email"
+                          name="email"
+                          required
+                          value={resetEmail}
+                          onChange={(e) => setResetEmail(e.target.value)}
+                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
+                          placeholder="your-email@example.com"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setIsForgotPassword(false)}
+                      className="text-sm text-indigo-600 hover:text-indigo-500"
+                    >
+                      Back to Sign In
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isResetting}
+                      className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                      {isResetting ? 'Sending...' : 'Send Reset Link'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={handleSignIn} className="mt-8 space-y-6">
+                  <div className="space-y-4">
+                    <div className="group">
+                      <label className="block text-sm font-medium text-gray-700">Email</label>
+                      <div className="mt-1 relative rounded-md shadow-sm">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                          </svg>
+                        </div>
+                        <input
+                          type="email"
+                          name="email"
+                          required
+                          value={signinData.email}
+                          onChange={handleSigninChange}
+                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
+                          placeholder="your-email@example.com"
+                        />
+                      </div>
+                    </div>
+                    <div className="group">
+                      <label className="block text-sm font-medium text-gray-700">Password</label>
+                      <div className="mt-1 relative rounded-md shadow-sm">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <input
+                          type="password"
+                          name="password"
+                          required
+                          value={signinData.password}
+                          onChange={handleSigninChange}
+                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
+                          placeholder="••••••••"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <input
+                        id="remember-me"
+                        name="remember-me"
+                        type="checkbox"
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      />
+                      <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                        Remember me
+                      </label>
+                    </div>
+
+                    <div className="text-sm">
+                      <Link
+                        href="/reset-password"
+                        className="font-medium text-indigo-600 hover:text-indigo-500"
+                      >
+                        Forgot password?
+                      </Link>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all shadow-md hover:shadow-lg disabled:opacity-50 transform hover:-translate-y-0.5 active:translate-y-0"
+                  >
+                    {isLoading ? (
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : null}
+                    {isLoading ? 'Signing in...' : 'Sign in'}
+                  </button>
+
+                  <div className="mt-6">
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-gray-300"></div>
+                      </div>
+                      <div className="relative flex justify-center text-sm">
+                        <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 grid grid-cols-3 gap-3">
+                      <button
+                        type="button"
+                        className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all transform hover:-translate-y-0.5 hover:shadow"
+                      >
+                        <span className="sr-only">Sign in with Google</span>
+                        <svg className="w-5 h-5" viewBox="0 0 24 24">
+                          <path
+                            fill="currentColor"
+                            d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all transform hover:-translate-y-0.5 hover:shadow"
+                      >
+                        <span className="sr-only">Sign in with Facebook</span>
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path
+                            fillRule="evenodd"
+                            d="M20 10c0-5.523-4.477-10-10-10S0 4.477 0 10c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V10h2.54V7.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V10h2.773l-.443 2.89h-2.33v6.988C16.343 19.128 20 14.991 20 10z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all transform hover:-translate-y-0.5 hover:shadow"
+                      >
+                        <span className="sr-only">Sign in with Twitter</span>
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M6.29 18.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0020 3.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.073 4.073 0 01.8 7.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 010 16.407a11.616 11.616 0 006.29 1.84" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              )
+            ) : (
+              /* Sign Up Form */
+              <form onSubmit={handleSignUp} className="mt-8 space-y-6">
                 <div className="space-y-4">
                   <div className="group">
-                  <label className="block text-sm font-medium text-gray-700">Email</label>
+                    <label className="block text-sm font-medium text-gray-700">Email</label>
                     <div className="mt-1 relative rounded-md shadow-sm">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -286,31 +449,52 @@ export default function AuthPage() {
                           <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
                         </svg>
                       </div>
-                  <input
-                    type="email"
-                    name="email"
-                    required
-                    value={signinData.email}
-                    onChange={handleSigninChange}
+                      <input
+                        type="email"
+                        name="email"
+                        required
+                        value={signupData.email}
+                        onChange={handleSignupChange}
                         className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
                         placeholder="your-email@example.com"
-                  />
-                </div>
+                      />
+                    </div>
                   </div>
+
                   <div className="group">
-                  <label className="block text-sm font-medium text-gray-700">Password</label>
+                    <label className="block text-sm font-medium text-gray-700">Password</label>
                     <div className="mt-1 relative rounded-md shadow-sm">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                         </svg>
                       </div>
-                  <input
-                    type="password"
-                    name="password"
-                    required
-                    value={signinData.password}
-                    onChange={handleSigninChange}
+                      <input
+                        type="password"
+                        name="password"
+                        required
+                        value={signupData.password}
+                        onChange={handleSignupChange}
+                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
+                        placeholder="••••••••"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="group">
+                    <label className="block text-sm font-medium text-gray-700">Confirm Password</label>
+                    <div className="mt-1 relative rounded-md shadow-sm">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <input
+                        type="password"
+                        name="confirmPassword"
+                        required
+                        value={signupData.confirmPassword}
+                        onChange={handleSignupChange}
                         className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
                         placeholder="••••••••"
                       />
@@ -318,370 +502,14 @@ export default function AuthPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <input
-                      id="remember-me"
-                      name="remember-me"
-                      type="checkbox"
-                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                    />
-                    <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                      Remember me
-                    </label>
-                  </div>
-
-                  <div className="text-sm">
-                    <a href="#" className="font-medium text-indigo-600 hover:text-indigo-500 hover:underline transition-all">
-                      Forgot password?
-                    </a>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all shadow-md hover:shadow-lg disabled:opacity-50 transform hover:-translate-y-0.5 active:translate-y-0"
-                >
-                  {isLoading ? (
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  ) : null}
-                  {isLoading ? 'Signing in...' : 'Sign in'}
-                </button>
-
-                <div className="mt-6">
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-300"></div>
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-2 bg-white text-gray-500">Or continue with</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 grid grid-cols-3 gap-3">
-                    <button
-                      type="button"
-                      className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all transform hover:-translate-y-0.5 hover:shadow"
-                    >
-                      <span className="sr-only">Sign in with Google</span>
-                      <svg className="w-5 h-5" viewBox="0 0 24 24">
-                        <path
-                          fill="currentColor"
-                          d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all transform hover:-translate-y-0.5 hover:shadow"
-                    >
-                      <span className="sr-only">Sign in with Facebook</span>
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fillRule="evenodd"
-                          d="M20 10c0-5.523-4.477-10-10-10S0 4.477 0 10c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V10h2.54V7.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V10h2.773l-.443 2.89h-2.33v6.988C16.343 19.128 20 14.991 20 10z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all transform hover:-translate-y-0.5 hover:shadow"
-                    >
-                      <span className="sr-only">Sign in with Twitter</span>
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M6.29 18.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0020 3.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.073 4.073 0 01.8 7.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 010 16.407a11.616 11.616 0 006.29 1.84" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </form>
-            ) : (
-              /* Sign Up Form */
-              <form onSubmit={handleSignUp} className="mt-8 space-y-6">
-                <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="group">
-                    <label className="block text-sm font-medium text-gray-700">First Name</label>
-                      <div className="mt-1 relative rounded-md shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                    <input
-                      type="text"
-                      name="first_name"
-                      required
-                      value={signupData.first_name}
-                      onChange={handleSignupChange}
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
-                    />
-                  </div>
-                    </div>
-                    <div className="group">
-                    <label className="block text-sm font-medium text-gray-700">Last Name</label>
-                      <div className="mt-1 relative rounded-md shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                    <input
-                      type="text"
-                      name="last_name"
-                      required
-                      value={signupData.last_name}
-                      onChange={handleSignupChange}
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
-                    />
-                  </div>
-                </div>
-                  </div>
-
-                  <div className="group">
-                  <label className="block text-sm font-medium text-gray-700">Email</label>
-                    <div className="mt-1 relative rounded-md shadow-sm">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
-                          <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
-                        </svg>
-                      </div>
-                  <input
-                    type="email"
-                    name="email"
-                    required
-                    value={signupData.email}
-                    onChange={handleSignupChange}
-                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
-                        placeholder="your-email@example.com"
-                  />
-                </div>
-                  </div>
-
-                  <div className="group">
-                  <label className="block text-sm font-medium text-gray-700">Phone Number</label>
-                    <div className="mt-1 relative rounded-md shadow-sm">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
-                        </svg>
-                      </div>
-                  <input
-                    type="tel"
-                    name="phone_number"
-                        required
-                    value={signupData.phone_number}
-                    onChange={handleSignupChange}
-                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
-                        placeholder="+1 (555) 000-0000"
-                  />
-                </div>
-                  </div>
-
-                  <div className="group">
-                  <label className="block text-sm font-medium text-gray-700">Address</label>
-                    <div className="mt-1 relative rounded-md shadow-sm">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                  <input
-                    type="text"
-                    name="address"
-                    required
-                    value={signupData.address}
-                    onChange={handleSignupChange}
-                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
-                  />
-                </div>
-                  </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="group">
-                    <label className="block text-sm font-medium text-gray-700">City</label>
-                      <div className="mt-1 relative rounded-md shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-                          </svg>
-                        </div>
-                    <input
-                      type="text"
-                      name="city"
-                      required
-                      value={signupData.city}
-                      onChange={handleSignupChange}
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
-                    />
-                  </div>
-                    </div>
-                    <div className="group">
-                    <label className="block text-sm font-medium text-gray-700">State</label>
-                      <div className="mt-1 relative rounded-md shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-                          </svg>
-                        </div>
-                    <input
-                      type="text"
-                      name="state"
-                      required
-                      value={signupData.state}
-                      onChange={handleSignupChange}
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
-                    />
-                  </div>
-                </div>
-                  </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="group">
-                    <label className="block text-sm font-medium text-gray-700">Postal Code</label>
-                      <div className="mt-1 relative rounded-md shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-                          </svg>
-                        </div>
-                    <input
-                      type="text"
-                      name="postal_code"
-                      required
-                      value={signupData.postal_code}
-                      onChange={handleSignupChange}
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
-                    />
-                  </div>
-                    </div>
-                    <div className="group">
-                    <label className="block text-sm font-medium text-gray-700">Country</label>
-                      <div className="mt-1 relative rounded-md shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M3 6a3 3 0 013-3h10a1 1 0 01.8 1.6L14.25 8l2.55 3.4A1 1 0 0116 13H6a1 1 0 00-1 1v3a1 1 0 11-2 0V6z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                    <input
-                      type="text"
-                      name="country"
-                      required
-                      value={signupData.country}
-                      onChange={handleSignupChange}
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
-                    />
-                  </div>
-                </div>
-                  </div>
-
-                  <div className="group">
-                  <label className="block text-sm font-medium text-gray-700">Password</label>
-                    <div className="mt-1 relative rounded-md shadow-sm">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                  <input
-                    type="password"
-                    name="password"
-                    required
-                    value={signupData.password}
-                    onChange={handleSignupChange}
-                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
-                        placeholder="••••••••"
-                  />
-                </div>
-                  </div>
-
-                  <div className="group">
-                  <label className="block text-sm font-medium text-gray-700">Confirm Password</label>
-                    <div className="mt-1 relative rounded-md shadow-sm">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    required
-                    value={signupData.confirmPassword}
-                    onChange={handleSignupChange}
-                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all group-hover:shadow-md"
-                        placeholder="••••••••"
-                  />
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all shadow-md hover:shadow-lg disabled:opacity-50 transform hover:-translate-y-0.5 active:translate-y-0"
-                >
-                  {isLoading ? (
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  ) : null}
-                  {isLoading ? 'Creating Account...' : 'Create Account'}
-                </button>
-
-                <div className="mt-6">
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-300"></div>
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-2 bg-white text-gray-500">Or continue with</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 grid grid-cols-3 gap-3">
-                    <button
-                      type="button"
-                      className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all transform hover:-translate-y-0.5 hover:shadow"
-                    >
-                      <span className="sr-only">Sign up with Google</span>
-                      <svg className="w-5 h-5" viewBox="0 0 24 24">
-                        <path
-                          fill="currentColor"
-                          d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all transform hover:-translate-y-0.5 hover:shadow"
-                    >
-                      <span className="sr-only">Sign up with Facebook</span>
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fillRule="evenodd"
-                          d="M20 10c0-5.523-4.477-10-10-10S0 4.477 0 10c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V10h2.54V7.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V10h2.773l-.443 2.89h-2.33v6.988C16.343 19.128 20 14.991 20 10z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 transition-all transform hover:-translate-y-0.5 hover:shadow"
-                    >
-                      <span className="sr-only">Sign up with Twitter</span>
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M6.29 18.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0020 3.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.073 4.073 0 01.8 7.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 010 16.407a11.616 11.616 0 006.29 1.84" />
-                      </svg>
-                    </button>
-                  </div>
+                <div>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? 'Creating account...' : 'Create account'}
+                  </button>
                 </div>
               </form>
             )}

@@ -13,6 +13,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [user, setUser] = useState<any>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -143,8 +144,8 @@ export default function DashboardLayout({
 
                   {/* User info */}
                   {user && (
-                    <div className="flex items-center gap-3 mx-4 mt-2 mb-5 p-3 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50">
-                      <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-medium">
+                    <div className="flex items-center gap-3 m-4 mt-5 p-3 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100/50">
+                      <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-medium shadow-md">
                         {user.first_name?.[0] || user.email?.[0] || '?'}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -155,15 +156,6 @@ export default function DashboardLayout({
                           {user.role || 'Customer'}
                         </p>
                       </div>
-                      <button 
-                        onClick={handleSignOut}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                        aria-label="Sign out"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                      </button>
                     </div>
                   )}
 
@@ -199,40 +191,54 @@ export default function DashboardLayout({
       </Transition.Root>
 
       {/* Static sidebar for desktop */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:w-72">
-        <div className="flex flex-col grow overflow-y-auto bg-white/80 backdrop-blur-xl border-r border-gray-200/50 shadow-xl rounded-r-3xl">
-          <div className="flex flex-col flex-grow pt-5 overflow-y-auto">
-            <div className="flex items-center justify-center flex-shrink-0 px-4">
-              <span className="bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent text-2xl font-bold">E-Shop</span>
+      <div className={`hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex ${isCollapsed ? 'lg:w-20' : 'lg:w-72'} transition-all duration-300`}>
+        <div className="flex flex-col h-full bg-white/80 backdrop-blur-xl border-r border-gray-200/50 shadow-xl rounded-r-3xl relative">
+          {/* Collapse Button */}
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="absolute -right-3 top-1/2 transform -translate-y-1/2 w-6 h-24 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors border border-gray-200/50 z-50 group"
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <svg
+              className={`w-4 h-4 text-gray-500 transform transition-transform duration-300 group-hover:text-gray-700 ${isCollapsed ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          {/* Sidebar Content */}
+          <div className="flex flex-col h-full">
+            {/* Logo */}
+            <div className="flex items-center justify-center p-4">
+              {!isCollapsed && (
+                <span className="bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent text-2xl font-bold">E-Shop</span>
+              )}
             </div>
             
-            {/* User info */}
-            {user && (
-              <div className="flex items-center gap-3 m-4 mt-5 p-3 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100/50">
-                <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-medium shadow-md">
-                  {user.first_name?.[0] || user.email?.[0] || '?'}
+            {/* User Profile */}
+            {user && !isCollapsed && (
+              <div className="px-4">
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100/50">
+                  <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-medium shadow-md">
+                    {user.first_name?.[0] || user.email?.[0] || '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {user.email}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {user.role || 'Customer'}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {user.email}
-                  </p>
-                  <p className="text-xs text-gray-500 truncate">
-                    {user.role || 'Customer'}
-                  </p>
-                </div>
-                <button 
-                  onClick={handleSignOut} 
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                  aria-label="Sign out"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                </button>
               </div>
             )}
 
-            <nav className="flex-1 px-4 pb-4 mt-5 space-y-1.5">
+            {/* Navigation */}
+            <nav className="flex-1 px-4 mt-6 space-y-1.5 overflow-y-auto">
               {menuItems.map((item) => {
                 const isActive = pathname?.startsWith(item.href);
                 return (
@@ -248,9 +254,13 @@ export default function DashboardLayout({
                     <span className={`transition-colors ${isActive ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-500'}`}>
                       {item.icon}
                     </span>
-                    {item.name}
-                    {isActive && (
-                      <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                    {!isCollapsed && (
+                      <>
+                        <span>{item.name}</span>
+                        {isActive && (
+                          <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                        )}
+                      </>
                     )}
                   </Link>
                 );
@@ -276,25 +286,14 @@ export default function DashboardLayout({
         </div>
       </div>
 
-      <main className="lg:pl-72">
-        <div className="relative">
-          {/* Main content wrapper with glassmorphism */}
-          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 relative z-10">
-            <div className="bg-white/80 backdrop-blur-xl shadow-xl rounded-3xl border border-gray-100/50 p-6 md:p-8 relative overflow-hidden">
-              {/* Background gradient */}
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 z-0"></div>
-              
-              {/* Inner shadow for 3D effect */}
-              <div className="absolute inset-0 shadow-inner rounded-3xl pointer-events-none z-0"></div>
-              
-              {/* Content container */}
-              <div className="relative z-10">
-                {children}
-              </div>
-            </div>
+      {/* Main content */}
+      <div className={`lg:pl-${isCollapsed ? '20' : '72'} transition-all duration-300`}>
+        <main className="py-10">
+          <div className="px-4 sm:px-6 lg:px-8">
+            {children}
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
       
       {/* CSS for blob animation */}
       <style jsx global>{`

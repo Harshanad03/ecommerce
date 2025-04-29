@@ -25,9 +25,10 @@ CREATE POLICY "user_profiles_select_policy"
     ON user_profiles FOR SELECT 
     USING (auth.uid() = id);
 
+-- Allow profile creation during signup
 CREATE POLICY "user_profiles_insert_policy" 
     ON user_profiles FOR INSERT 
-    WITH CHECK (auth.uid() = id);
+    WITH CHECK (true);  -- Allow any authenticated user to insert
 
 CREATE POLICY "user_profiles_update_policy" 
     ON user_profiles FOR UPDATE 

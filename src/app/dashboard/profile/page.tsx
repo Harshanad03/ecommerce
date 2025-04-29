@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -28,14 +28,15 @@ export default function ProfilePage() {
   const [editedProfile, setEditedProfile] = useState<Profile | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
-    confirmPassword: ''
+    confirmNewPassword: ''
   });
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -110,32 +111,50 @@ export default function ProfilePage() {
     }
   };
 
-  const handlePasswordChange = async (e: React.FormEvent) => {
+  const handlePasswordChange = async (e: FormEvent) => {
     e.preventDefault();
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setError('New passwords do not match');
-      return;
-    }
+    setError(null);
+    setIsLoading(true);
 
     try {
-      setIsChangingPassword(true);
-      const { error } = await supabase.auth.updateUser({
+      if (passwordData.newPassword !== passwordData.confirmNewPassword) {
+        throw new Error('New passwords do not match');
+      }
+
+      // First verify current password
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: profile?.email || '',
+        password: passwordData.currentPassword
+      });
+
+      if (signInError) throw new Error('Current password is incorrect');
+
+      // Update password
+      const { error: updateError } = await supabase.auth.updateUser({
         password: passwordData.newPassword
       });
 
-      if (error) throw error;
-      setSuccess('Password updated successfully');
-      setShowPasswordModal(false);
+      if (updateError) throw updateError;
+
+      setSuccess('Password has been updated successfully');
+      setIsChangingPassword(false);
       setPasswordData({
         currentPassword: '',
         newPassword: '',
-        confirmPassword: ''
+        confirmNewPassword: ''
       });
-    } catch (err: any) {
-      setError(err.message);
+    } catch (error: any) {
+      setError(error.message);
     } finally {
-      setIsChangingPassword(false);
+      setIsLoading(false);
     }
+  };
+
+  const handlePasswordInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPasswordData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
   };
 
   const handleDeleteAccount = async () => {
@@ -217,7 +236,7 @@ export default function ProfilePage() {
           {/* Profile Header */}
           <div className="relative h-32 bg-indigo-600">
             <div className="absolute -bottom-12 left-8">
-              <div className="h-24 w-24 rounded-full border-4 border-white bg-gray-200 flex items-center justify-center overflow-hidden">
+              <div className="h-24 w-24 rounded-full border-4 border-white bg-indigo-500 flex items-center justify-center overflow-hidden">
                 {profile?.avatar_url ? (
                   <img
                     src={profile.avatar_url}
@@ -225,9 +244,9 @@ export default function ProfilePage() {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <svg className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
+                  <span className="text-3xl font-bold text-white">
+                    {profile?.first_name?.[0]?.toUpperCase() || profile?.email?.[0]?.toUpperCase()}
+                  </span>
                 )}
               </div>
             </div>
@@ -250,12 +269,6 @@ export default function ProfilePage() {
                       className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
                     >
                       Edit Profile
-                    </button>
-                    <button
-                      onClick={() => setShowPasswordModal(true)}
-                      className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
-                    >
-                      Change Password
                     </button>
                     <button
                       onClick={handleSignOut}
@@ -445,104 +458,9 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
-
-            {/* Danger Zone */}
-            <div className="mt-12 pt-8 border-t border-gray-200">
-              <h2 className="text-xl font-semibold text-red-600 mb-4">Danger Zone</h2>
-              <button
-                onClick={() => setShowDeleteModal(true)}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-              >
-                Delete Account
-              </button>
-            </div>
           </div>
         </div>
       </div>
-
-      {/* Password Change Modal */}
-      {showPasswordModal && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Change Password</h3>
-            <form onSubmit={handlePasswordChange} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Current Password</label>
-                <input
-                  type="password"
-                  value={passwordData.currentPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">New Password</label>
-                <input
-                  type="password"
-                  value={passwordData.newPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Confirm New Password</label>
-                <input
-                  type="password"
-                  value={passwordData.confirmPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                  required
-                />
-              </div>
-              <div className="flex justify-end space-x-4 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setShowPasswordModal(false)}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isChangingPassword}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                >
-                  {isChangingPassword ? 'Changing...' : 'Change Password'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Account Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-medium text-red-600 mb-4">Delete Account</h3>
-            <p className="text-gray-600 mb-4">
-              Are you sure you want to delete your account? This action cannot be undone.
-            </p>
-            <div className="flex justify-end space-x-4">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteAccount}
-                disabled={isDeleting}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
-              >
-                {isDeleting ? 'Deleting...' : 'Delete Account'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
